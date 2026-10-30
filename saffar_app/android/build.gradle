@@ -1,0 +1,32 @@
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.buildDir = '../build'
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects {
+    project.evaluationDependsOn(':app')
+}
+
+subprojects { subproject ->
+    subproject.plugins.withId('com.android.library') {
+        subproject.android {
+            if (namespace == null) {
+                if (subproject.name == 'razorpay_flutter') {
+                    namespace 'com.razorpay.razorpay_flutter'
+                } else {
+                    namespace "com.example.${subproject.name.replace('-', '_')}"
+                }
+            }
+        }
+    }
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}
