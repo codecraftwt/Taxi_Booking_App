@@ -6,19 +6,39 @@ if (!buffer.SlowBuffer) {
 
 const express = require("express");
 const cors = require("cors");
-const authRouter = require("./routes/auth_router");
-const rideRouter = require("./routes/ride_router");
-const userRouter = require("./routes/user_router");
-const driverRouter = require("./routes/driver_router");
+const path = require("path");
+
+// User Routes
+const userRouter = require("./routes/user/user_router");
+const rideRouter = require("./routes/user/ride_router");
+
+// Driver Routes
+const driverRouter = require("./routes/driver/driver_router");
+
+// Shared Routes
+const authRouter = require("./routes/shared/auth_router");
+const paymentRouter = require("./routes/shared/payment_router");
+const { apiRateLimiter, authRateLimiter } = require("./middlewares/security_middleware");
 
 const app = express();
 
-// Enable CORS for Flutter Web and cross-origin requests
+// Enable CORS for Flutter Web, iOS, Android and cross-origin requests
 app.use(cors());
 
-// Parse JSON and urlencoded request bodies
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+// Parse JSON and capture raw body for cryptographic webhook signature verification
+app.use(express.json({
+  limit: "15mb",
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString();
+  }
+}));
+app.use(express.urlencoded({ extended: false, limit: "15mb" }));
+
+// General API Rate Limiting (200 requests / minute)
+app.use("/api", apiRateLimiter);
+
+// Serve static uploads
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Health check endpoint
 app.get("/", (req, res) => {
@@ -30,10 +50,11 @@ app.get("/", (req, res) => {
 });
 
 // Mount API routes
-app.use("/api/auth", authRouter);
+app.use("/api/auth", authRateLimiter, authRouter);
 app.use("/api/ride", rideRouter);
 app.use("/api/user", userRouter);
 app.use("/api/driver", driverRouter);
+app.use("/api/payment", paymentRouter);
 
 // 404 handler
 app.use((req, res) => {

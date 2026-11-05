@@ -1,10 +1,2 @@
-const express = require("express");
-const { getUserInfo, updateUserInfo } = require("../controllers/userController");
-const { validateBearerToken } = require("../middlewares/token_middleware");
-
-const router = express.Router();
-
-router.get("/", validateBearerToken, getUserInfo);
-router.patch("/", validateBearerToken, updateUserInfo);
-
-module.exports = router;
+// Re-export from organized role folder
+module.exports = require('./user/user_router.js');

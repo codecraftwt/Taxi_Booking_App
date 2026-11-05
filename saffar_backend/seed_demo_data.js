@@ -1,3 +1,7 @@
+const bufferModule = require("buffer");
+if (!bufferModule.SlowBuffer) {
+  bufferModule.SlowBuffer = bufferModule.Buffer;
+}
 require('dotenv').config();
 const bcrypt = require('bcrypt');
 const { v4: uuidv4 } = require('uuid');
@@ -49,39 +53,7 @@ async function seedAll() {
     const driverId = driverInsertRes.rows[0].id;
     console.log(`✅ Seeded/Updated Driver: [ID: ${driverId}] Phone: 9988776655 | Pass: password123`);
 
-    // 3. Seed Addresses
-    const addr1Id = 'addr_bkc_001';
-    const addr2Id = 'addr_airport_002';
-    const addr3Id = 'addr_marinedrive_003';
-
-    await query(`
-      INSERT INTO addresses (id, place, street, state, country, lat, lon, pincode)
-      VALUES 
-        ($1, 'Bandra Kurla Complex', 'BKC Road, G Block', 'Maharashtra', 'India', 19.0657, 72.8687, '400051'),
-        ($2, 'Chhatrapati Shivaji International Airport', 'Terminal 2, Sahar', 'Maharashtra', 'India', 19.0968, 72.8744, '400099'),
-        ($3, 'Marine Drive', 'Netaji Subhash Chandra Bose Road', 'Maharashtra', 'India', 18.9432, 72.8230, '400020')
-      ON CONFLICT (id) DO UPDATE SET street = EXCLUDED.street;
-    `, [addr1Id, addr2Id, addr3Id]);
-    console.log("✅ Seeded Sample Addresses");
-
-    // 4. Seed Sample Completed Rides
-    const ride1Id = 'ride_demo_001';
-    const ride2Id = 'ride_demo_002';
-
-    await query(`
-      INSERT INTO rides (id, user_id, driver_id, source_address_id, destination_address_id, start_time, end_time, cancelled, price, discount_price)
-      VALUES 
-        ($1, $2, $3, $4, $5, NOW() - INTERVAL '2 hours', NOW() - INTERVAL '1 hour', false, 350.0, 0.0),
-        ($6, $2, $3, $5, $7, NOW() - INTERVAL '1 day', NOW() - INTERVAL '23 hours', false, 480.0, 30.0)
-      ON CONFLICT (id) DO UPDATE 
-      SET user_id = EXCLUDED.user_id, driver_id = EXCLUDED.driver_id, end_time = EXCLUDED.end_time;
-    `, [
-      ride1Id, userId, driverId, addr1Id, addr2Id,
-      ride2Id, addr3Id,
-    ]);
-    console.log("✅ Seeded Sample Completed Rides for Driver & Passenger");
-
-    console.log("\nAll demo data seeded successfully into PostgreSQL!");
+    console.log("\nSetup completed. Authentic users and driver available without dummy ride history.");
     process.exit(0);
   } catch (err) {
     console.error("❌ Seed error:", err.message);

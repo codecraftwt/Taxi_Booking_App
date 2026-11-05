@@ -44,6 +44,37 @@ const validateBearerToken = (req, res, next) => {
   }
 };
 
+const validateDriverToken = (req, res, next) => {
+  validateBearerToken(req, res, () => {
+    // If role is explicitly specified, enforce it
+    if (req.user && req.user.role && req.user.role !== "driver") {
+      return res.status(403).json({
+        error: {
+          code: "FORBIDDEN_ROLE",
+          message: "Access denied. Only registered drivers can access this endpoint.",
+        },
+      });
+    }
+    return next();
+  });
+};
+
+const validateUserToken = (req, res, next) => {
+  validateBearerToken(req, res, () => {
+    if (req.user && req.user.role && req.user.role !== "user") {
+      return res.status(403).json({
+        error: {
+          code: "FORBIDDEN_ROLE",
+          message: "Access denied. Only passenger accounts can access this endpoint.",
+        },
+      });
+    }
+    return next();
+  });
+};
+
 module.exports = {
   validateBearerToken,
+  validateDriverToken,
+  validateUserToken,
 };

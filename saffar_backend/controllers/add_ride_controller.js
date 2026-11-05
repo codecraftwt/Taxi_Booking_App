@@ -1,3 +1,2 @@
-const { addRideAndRideAddresses } = require("./rideController");
-module.exports = addRideAndRideAddresses;
-
+// Re-export from organized role folder
+module.exports = require('./user/add_ride_controller.js');

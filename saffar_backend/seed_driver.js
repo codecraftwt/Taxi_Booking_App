@@ -1,3 +1,7 @@
+const bufferModule = require("buffer");
+if (!bufferModule.SlowBuffer) {
+  bufferModule.SlowBuffer = bufferModule.Buffer;
+}
 require('dotenv').config();
 const { query } = require('./database');
 
