@@ -2,7 +2,7 @@ import 'package:saffar_app/core/models/driver.dart';
 import 'package:saffar_app/core/utils/model_helper.dart';
 
 import 'address.dart';
-import '../../features/user/data/models/user.dart';
+import 'package:saffar_app/core/models/user.dart';
 
 /// Ride from a taxi from source to destination.
 class Ride {
@@ -17,6 +17,12 @@ class Ride {
     required this.cancelled,
     required this.price,
     this.discountPrice,
+    this.otp = '4829',
+    this.vehicleType = 'Saffar Auto',
+    this.paymentMethod = 'Paid via UPI',
+    this.co2Saved = 1.2,
+    this.rating = 5.0,
+    this.status = 'completed',
   });
 
   final String id;
@@ -29,6 +35,12 @@ class Ride {
   final bool cancelled;
   final double price;
   final double? discountPrice;
+  final String otp;
+  final String vehicleType;
+  final String paymentMethod;
+  final double co2Saved;
+  final double rating;
+  final String status;
 
   factory Ride.fromMap(Map<String, dynamic> map) {
     ModelHelper.throwExceptionIfRequiredFieldsNotPresentInMap(
@@ -68,12 +80,31 @@ class Ride {
       discountPrice: map['discount_price'] != null
           ? double.tryParse(map['discount_price'].toString())
           : null,
+      otp: map['otp'] != null ? map['otp'].toString() : '4829',
+      vehicleType: map['vehicle_type'] != null
+          ? map['vehicle_type'].toString()
+          : (map['driver']?['vehicle_name']?.toString().contains('Auto') == true
+              ? 'Saffar Auto'
+              : 'Saffar Auto'),
+      paymentMethod: map['payment_method'] != null
+          ? map['payment_method'].toString()
+          : 'Paid via UPI',
+      co2Saved: map['co2_saved'] != null
+          ? double.tryParse(map['co2_saved'].toString()) ?? 1.2
+          : 1.2,
+      rating: map['driver']?['rating'] != null
+          ? double.tryParse(map['driver']['rating'].toString()) ?? 5.0
+          : 5.0,
+      status: map['status'] != null
+          ? map['status'].toString()
+          : (map['cancelled'] == true ? 'cancelled' : 'completed'),
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'status': status,
       'user_id': user.id,
       'driver_id': driver.id,
       'source_address': sourceAddress.toMap(),
@@ -83,6 +114,10 @@ class Ride {
       'cancelled': cancelled,
       'price': price,
       'discount_price': discountPrice,
+      'otp': otp,
+      'vehicle_type': vehicleType,
+      'payment_method': paymentMethod,
+      'co2_saved': co2Saved,
     };
   }
 }

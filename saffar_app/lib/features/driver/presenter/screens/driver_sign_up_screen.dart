@@ -20,7 +20,9 @@ class _DriverSignUpScreenState extends State<DriverSignUpScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
   final TextEditingController _vehicleNameController = TextEditingController();
+  final TextEditingController _vehicleModelController = TextEditingController();
   final TextEditingController _vehicleNumberController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
@@ -32,7 +34,9 @@ class _DriverSignUpScreenState extends State<DriverSignUpScreen> {
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
+    _emailController.dispose();
     _vehicleNameController.dispose();
+    _vehicleModelController.dispose();
     _vehicleNumberController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -59,6 +63,12 @@ class _DriverSignUpScreenState extends State<DriverSignUpScreen> {
             password: _passwordController.text.trim(),
             vehicleName: _vehicleNameController.text.trim(),
             vehicleNumber: _vehicleNumberController.text.trim(),
+            vehicleModel: _vehicleModelController.text.trim().isNotEmpty
+                ? _vehicleModelController.text.trim()
+                : null,
+            email: _emailController.text.trim().isNotEmpty
+                ? _emailController.text.trim()
+                : null,
           );
     }
   }
@@ -171,20 +181,43 @@ class _DriverSignUpScreenState extends State<DriverSignUpScreen> {
                     ),
                     const SizedBox(height: 14),
 
+                    // Email (Optional)
+                    TextFormField(
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(
+                        labelText: 'Email Address (Optional)',
+                        hintText: 'driver@example.com',
+                        prefixIcon: Icon(Icons.email_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
                     // Vehicle Name
                     TextFormField(
                       controller: _vehicleNameController,
                       decoration: const InputDecoration(
-                        labelText: 'Vehicle Name / Model',
-                        hintText: 'e.g. Toyota Innova, Maruti Swift',
+                        labelText: 'Vehicle Name',
+                        hintText: 'e.g. Toyota Innova, Bajaj RE Auto',
                         prefixIcon: Icon(Icons.directions_car),
                       ),
                       validator: (val) {
                         if (val == null || val.trim().isEmpty) {
-                          return 'Please enter vehicle model';
+                          return 'Please enter vehicle name';
                         }
                         return null;
                       },
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Vehicle Model (Optional)
+                    TextFormField(
+                      controller: _vehicleModelController,
+                      decoration: const InputDecoration(
+                        labelText: 'Vehicle Model / Year (Optional)',
+                        hintText: 'e.g. 2024 EV, Petrol BS6',
+                        prefixIcon: Icon(Icons.category_outlined),
+                      ),
                     ),
                     const SizedBox(height: 14),
 

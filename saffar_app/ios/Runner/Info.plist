@@ -48,7 +48,14 @@
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<true/>
 		<key>NSLocationWhenInUseUsageDescription</key>
-		<true/>
+		<string>Saffar requires your location to find nearby rides, calculate accurate pickup ETAs, and track your trip route in real time.</string>
+		<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+		<string>Saffar needs background location access for drivers to receive nearby ride requests and broadcast live route navigation to passengers during trips.</string>
+		<key>UIBackgroundModes</key>
+		<array>
+			<string>location</string>
+			<string>remote-notification</string>
+		</array>
 		<key>UIStatusBarHidden</key>
 		<false/>
 	</dict>

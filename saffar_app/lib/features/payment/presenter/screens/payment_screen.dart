@@ -7,8 +7,8 @@ import 'package:saffar_app/core/models/driver.dart';
 import 'package:saffar_app/core/service_locator.dart';
 import 'package:saffar_app/features/payment/presenter/cubits/payment_cubit.dart';
 
-import '../../../../core/models/ride.dart';
-import '../../../../core/utils/snackbar.dart';
+import 'package:saffar_app/core/models/ride.dart';
+import 'package:saffar_app/core/utils/snackbar.dart';
 
 class PaymentScreenArguments {
   const PaymentScreenArguments({

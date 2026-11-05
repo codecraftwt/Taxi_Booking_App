@@ -1,9 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:location/location.dart';
+import 'package:saffar_app/core/config/map_config.dart';
 import 'package:saffar_app/core/constants/nums.dart';
 import 'package:saffar_app/core/palette.dart';
+import 'package:saffar_app/core/service_locator.dart';
+import 'package:saffar_app/core/services/map_service.dart';
+import 'package:saffar_app/core/widgets/map_marker_widgets.dart';
+import 'package:saffar_app/features/driver/data/repositories/driver_repo.dart';
 import 'package:saffar_app/features/driver/presenter/cubits/driver_cubit.dart';
 import 'package:saffar_app/features/driver/presenter/cubits/driver_dashboard_cubit.dart';
+import 'package:saffar_app/features/driver/presenter/screens/driver_active_trip_screen.dart';
+import 'package:saffar_app/features/driver/presenter/screens/driver_pickup_navigation_screen.dart';
+import 'package:saffar_app/features/driver/presenter/screens/driver_vehicles_screen.dart';
+import 'package:saffar_app/features/driver/presenter/screens/ride_otp_verification_screen.dart';
+import 'package:saffar_app/features/driver/services/driver_location_service.dart';
+import 'package:saffar_app/features/driver/presenter/cubits/ride_request_cubit.dart';
+import 'package:saffar_app/features/driver/presenter/widgets/incoming_ride_request_dialog.dart';
+import 'package:saffar_app/features/driver/services/driver_socket_service.dart';
 
 class DriverDashboardScreen extends StatefulWidget {
   const DriverDashboardScreen({Key? key}) : super(key: key);
@@ -15,16 +31,122 @@ class DriverDashboardScreen extends StatefulWidget {
 }
 
 class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
+  bool _hasActiveTrip = false;
+  late final MapController _dashMapController;
+
   @override
   void initState() {
     super.initState();
+    _dashMapController = MapController();
     _loadDashboard();
+    _initSocketAndRequestListener();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkActiveTripAndRestore();
+    });
+  }
+
+  Future<void> _checkActiveTripAndRestore() async {
+    final token = context.read<DriverCubit>().state.token;
+    if (token == null) return;
+
+    try {
+      final trip = await sl<DriverRepo>().getActiveTrip(token);
+      if (trip != null && mounted) {
+        setState(() {
+          _hasActiveTrip = true;
+        });
+        final rideId = trip['ride_id']?.toString() ?? trip['id']?.toString();
+        final status = trip['status']?.toString();
+        if (rideId != null && status != null) {
+          if (status == 'accepted' || status == 'reaching_pickup') {
+            Navigator.pushNamed(
+              context,
+              DriverPickupNavigationScreen.routeName,
+              arguments: {'ride_id': rideId},
+            ).then((_) {
+              if (mounted) _checkActiveTripAndRestore();
+            });
+          } else if (status == 'arrived') {
+            Navigator.pushNamed(
+              context,
+              RideOtpVerificationScreen.routeName,
+              arguments: {
+                'ride_id': rideId,
+                'passenger_name': trip['passenger_name']?.toString() ?? 'Passenger',
+                'pickup_address': trip['pickup_address']?.toString() ?? 'Pickup Spot',
+                'fare': '₹${((trip['price'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}',
+              },
+            ).then((_) {
+              if (mounted) _checkActiveTripAndRestore();
+            });
+          } else if (status == 'in_progress' || status == 'started') {
+            Navigator.pushNamed(
+              context,
+              DriverActiveTripScreen.routeName,
+              arguments: {'ride_id': rideId},
+            ).then((_) {
+              if (mounted) _checkActiveTripAndRestore();
+            });
+          }
+        }
+      } else {
+        if (mounted && _hasActiveTrip) {
+          setState(() {
+            _hasActiveTrip = false;
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  void _initSocketAndRequestListener() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final driver = context.read<DriverCubit>().state.currentDriver;
+      final token = context.read<DriverCubit>().state.token;
+      if (driver != null && driver.isOnline) {
+        DriverSocketService.instance.connect(driver.id);
+        if (token != null) {
+          context.read<RideRequestCubit>().fetchPendingRequests(token);
+        }
+      }
+    });
+
+    DriverSocketService.instance.incomingRequestNotifier.addListener(_onNewIncomingRequest);
+    DriverSocketService.instance.alertNotificationNotifier.addListener(_onSocketAlert);
+  }
+
+  void _onNewIncomingRequest() {
+    if (_hasActiveTrip) return; // Guard: driver is already engaged in an active trip
+    final req = DriverSocketService.instance.incomingRequestNotifier.value;
+    if (req != null && mounted) {
+      IncomingRideRequestDialog.show(context, req);
+    }
+  }
+
+  void _onSocketAlert() {
+    final alert = DriverSocketService.instance.alertNotificationNotifier.value;
+    if (alert != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(alert), backgroundColor: Palette.primary),
+      );
+      DriverSocketService.instance.alertNotificationNotifier.value = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    DriverSocketService.instance.incomingRequestNotifier.removeListener(_onNewIncomingRequest);
+    DriverSocketService.instance.alertNotificationNotifier.removeListener(_onSocketAlert);
+    super.dispose();
   }
 
   void _loadDashboard() {
     final driverState = context.read<DriverCubit>().state;
     if (driverState.token != null) {
       context.read<DriverDashboardCubit>().fetchDashboard(driverState.token!);
+      if (driverState.currentDriver?.isOnline == true) {
+        context.read<RideRequestCubit>().fetchPendingRequests(driverState.token!);
+      }
     }
   }
 
@@ -56,6 +178,8 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                 const SizedBox(height: 20),
                 _buildOnlineToggle(),
                 const SizedBox(height: 20),
+                _buildLiveDriverMapPreview(),
+                _buildPendingRequestBanner(),
                 _buildStatsCards(),
                 const SizedBox(height: 20),
                 _buildActiveRideCard(),
@@ -158,6 +282,132 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
     );
   }
 
+  Future<void> _handleToggleAvailability(bool targetStatus) async {
+    final success = await context.read<DriverCubit>().toggleAvailability(targetStatus);
+    if (success && mounted) {
+      final driver = context.read<DriverCubit>().state.currentDriver;
+      final token = context.read<DriverCubit>().state.token;
+      if (driver != null) {
+        if (targetStatus) {
+          DriverSocketService.instance.connect(driver.id);
+          if (token != null) {
+            context.read<RideRequestCubit>().fetchPendingRequests(token);
+          }
+        } else {
+          DriverSocketService.instance.disconnect();
+          context.read<RideRequestCubit>().dismissActiveRequest();
+        }
+      }
+    } else if (!success && mounted) {
+      final error = context.read<DriverCubit>().state.error;
+      if (error != null) {
+        _showEligibilityOrPermissionDialog(error);
+      }
+    }
+  }
+
+  Widget _buildPendingRequestBanner() {
+    return BlocBuilder<RideRequestCubit, RideRequestState>(
+      builder: (context, state) {
+        final req = state.activeRequest;
+        if (req == null) return const SizedBox.shrink();
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFEF3C7),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFF59E0B)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF59E0B),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.notifications_active_rounded, color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Incoming Ride: ${req.passengerName}',
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Color(0xFF78350F)),
+                    ),
+                    Text(
+                      'Fare: ₹${req.fare.toStringAsFixed(0)} • ${req.distanceToPickup}',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF92400E)),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () => IncomingRideRequestDialog.show(context, req),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFD97706),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text('Review', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showEligibilityOrPermissionDialog(String error) {
+    final isVehicleError = error.toLowerCase().contains('vehicle') || error.toLowerCase().contains('document');
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: [
+            Icon(
+              isVehicleError ? Icons.directions_car_filled_rounded : Icons.location_off_rounded,
+              color: Palette.primary,
+              size: 26,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                isVehicleError ? 'Vehicle Verification Needed' : 'Location Required',
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          error,
+          style: const TextStyle(fontSize: 14, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Dismiss', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+          ),
+          if (isVehicleError)
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Palette.primary),
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.pushNamed(context, DriverVehiclesScreen.routeName);
+              },
+              child: const Text('Manage Vehicles', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildOnlineToggle() {
     return BlocBuilder<DriverCubit, DriverState>(
       builder: (context, driverState) {
@@ -169,123 +419,283 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: isOnline
-                  ? [const Color(0xFF219653), const Color(0xFF27AE60)]
-                  : [const Color(0xFF1A1A2E), const Color(0xFF2D2D44)],
+                  ? [const Color(0xFF15803D), const Color(0xFF16A34A)]
+                  : [const Color(0xFF0F172A), const Color(0xFF1E293B)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(22),
             boxShadow: [
               BoxShadow(
-                color: (isOnline ? const Color(0xFF219653) : const Color(0xFF1A1A2E))
-                    .withValues(alpha: 0.3),
-                blurRadius: 20,
+                color: (isOnline ? const Color(0xFF15803D) : const Color(0xFF0F172A))
+                    .withValues(alpha: 0.35),
+                blurRadius: 22,
                 offset: const Offset(0, 8),
               ),
             ],
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: isOnline ? Colors.greenAccent : Colors.grey.shade500,
-                            shape: BoxShape.circle,
-                          ),
+                        Row(
+                          children: [
+                            Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                color: isOnline ? const Color(0xFF4ADE80) : Colors.grey.shade500,
+                                shape: BoxShape.circle,
+                                boxShadow: isOnline
+                                    ? [
+                                        BoxShadow(
+                                          color: const Color(0xFF4ADE80).withValues(alpha: 0.6),
+                                          blurRadius: 8,
+                                          spreadRadius: 2,
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              isOnline ? 'LIVE ON DUTY' : 'OFFLINE / OFF DUTY',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.8,
+                                color: isOnline ? const Color(0xFFBBF7D0) : Colors.grey.shade400,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(height: 8),
                         Text(
-                          isOnline ? 'You are Online' : 'You are Offline',
+                          isOnline
+                              ? 'Accepting ride requests'
+                              : 'Go online to start receiving rides',
                           style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white70,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      isOnline
-                          ? 'Accepting ride requests'
-                          : 'Go online to start earning',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
+                  ),
+                  const SizedBox(width: 12),
+                  GestureDetector(
+                    onTap: isLoading ? null : () => _handleToggleAvailability(!isOnline),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      width: 66,
+                      height: 36,
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(18),
+                        color: isOnline
+                            ? Colors.white.withValues(alpha: 0.35)
+                            : Colors.white.withValues(alpha: 0.15),
+                      ),
+                      child: AnimatedAlign(
+                        duration: const Duration(milliseconds: 300),
+                        alignment: isOnline ? Alignment.centerRight : Alignment.centerLeft,
+                        child: isLoading
+                            ? const SizedBox(
+                                width: 30,
+                                height: 30,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Container(
+                                width: 30,
+                                height: 30,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.2),
+                                      blurRadius: 5,
+                                    ),
+                                  ],
+                                ),
+                                child: Icon(
+                                  isOnline
+                                      ? Icons.power_settings_new_rounded
+                                      : Icons.power_off_outlined,
+                                  size: 18,
+                                  color: isOnline
+                                      ? const Color(0xFF15803D)
+                                      : Colors.grey.shade700,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Divider(color: Colors.white12, height: 1),
+              const SizedBox(height: 12),
+
+              // GPS / Location Status Indicator
+              ValueListenableBuilder<LocationData?>(
+                valueListenable: DriverLocationService.instance.currentLocationNotifier,
+                builder: (context, loc, _) {
+                  if (isOnline) {
+                    final latStr = loc?.latitude != null ? loc!.latitude!.toStringAsFixed(4) : (driverState.currentDriver?.currentLat?.toStringAsFixed(4) ?? 'Locating...');
+                    final lngStr = loc?.longitude != null ? loc!.longitude!.toStringAsFixed(4) : (driverState.currentDriver?.currentLng?.toStringAsFixed(4) ?? '');
+                    final speedStr = (loc?.speed != null && loc!.speed! > 0)
+                        ? ' • ${(loc.speed! * 3.6).toStringAsFixed(0)} km/h'
+                        : '';
+
+                    return Row(
+                      children: [
+                        const Icon(Icons.gps_fixed_rounded, color: Color(0xFF4ADE80), size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'GPS: $latStr, $lngStr$speedStr (Streaming live)',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white70,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'ACTIVE',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Icon(Icons.location_off_outlined, color: Colors.grey.shade400, size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Location updates paused to conserve battery',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey.shade400,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLiveDriverMapPreview() {
+    return BlocBuilder<DriverCubit, DriverState>(
+      builder: (context, driverState) {
+        final isOnline = driverState.currentDriver?.active ?? false;
+        if (!isOnline) return const SizedBox.shrink();
+
+        return ValueListenableBuilder<LocationData?>(
+          valueListenable: DriverLocationService.instance.currentLocationNotifier,
+          builder: (context, loc, _) {
+            final lat = loc?.latitude ?? driverState.currentDriver?.currentLat ?? 16.7050;
+            final lon = loc?.longitude ?? driverState.currentDriver?.currentLng ?? 74.2433;
+            final driverPos = LatLng(lat, lon);
+            final heading = loc?.heading ?? driverState.currentDriver?.heading ?? 0.0;
+            final category = driverState.currentDriver?.vehicleName ?? 'Auto';
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 20),
+              height: 180,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Stack(
+                  children: [
+                    FlutterMap(
+                      mapController: _dashMapController,
+                      options: MapOptions(
+                        initialCenter: driverPos,
+                        initialZoom: 15.0,
+                      ),
+                      children: [
+                        MapService.instance.buildTileLayer(),
+                        MarkerLayer(
+                          markers: [
+                            MapMarkerWidgets.buildDriverLiveMarker(
+                              position: driverPos,
+                              heading: heading,
+                              category: category,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    MapService.instance.buildAttributionWidget(context),
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: GestureDetector(
+                        onTap: () {
+                          _dashMapController.move(driverPos, 15.0);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.15),
+                                blurRadius: 6,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(Icons.my_location_rounded, color: Palette.secondary, size: 18),
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
-              GestureDetector(
-                onTap: isLoading
-                    ? null
-                    : () {
-                        context
-                            .read<DriverCubit>()
-                            .toggleAvailability(!isOnline);
-                      },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  width: 64,
-                  height: 34,
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(17),
-                    color: isOnline
-                        ? Colors.white.withValues(alpha: 0.3)
-                        : Colors.white.withValues(alpha: 0.15),
-                  ),
-                  child: AnimatedAlign(
-                    duration: const Duration(milliseconds: 300),
-                    alignment:
-                        isOnline ? Alignment.centerRight : Alignment.centerLeft,
-                    child: isLoading
-                        ? const SizedBox(
-                            width: 28,
-                            height: 28,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : Container(
-                            width: 28,
-                            height: 28,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.15),
-                                  blurRadius: 4,
-                                ),
-                              ],
-                            ),
-                            child: Icon(
-                              isOnline
-                                  ? Icons.power_settings_new
-                                  : Icons.power_off_outlined,
-                              size: 16,
-                              color: isOnline
-                                  ? const Color(0xFF219653)
-                                  : Colors.grey.shade600,
-                            ),
-                          ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -428,6 +838,30 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                 iconColor: Palette.primary,
                 iconSize: 10,
                 text: destination?['street']?.toString() ?? destination?['place']?.toString() ?? 'Destination',
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pushNamed(
+                      context,
+                      DriverPickupNavigationScreen.routeName,
+                      arguments: {'ride_id': ride['id']?.toString()},
+                    );
+                  },
+                  icon: const Icon(Icons.navigation_rounded, size: 18),
+                  label: const Text(
+                    'Open Pickup Navigation',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Palette.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
               ),
             ],
           ),

@@ -1,30 +1,35 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility that Flutter provides. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:saffar_app/main.dart';
+import 'package:saffar_app/core/services/validator_service.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('ValidatorService Unit Tests', () {
+    late ValidatorService validatorService;
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    setUp(() {
+      validatorService = ValidatorService();
+    });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    test('Validates customer and driver names', () {
+      expect(validatorService.validateName('Sameer Verma'), isTrue);
+      expect(validatorService.validateName(''), isFalse);
+    });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    test('Validates 10-digit mobile phone numbers', () {
+      expect(validatorService.validatePhone('9876543210'), isTrue);
+      expect(validatorService.validatePhone('987654321'), isFalse); // 9 digits
+      expect(validatorService.validatePhone('98765432100'), isFalse); // 11 digits
+      expect(validatorService.validatePhone('987654abcd'), isFalse); // non-numeric
+    });
+
+    test('Validates email addresses', () {
+      expect(validatorService.validateEmail('sameer.v@example.com'), isTrue);
+      expect(validatorService.validateEmail('invalid-email'), isFalse);
+      expect(validatorService.validateEmail('@missingusername.com'), isFalse);
+    });
+
+    test('Validates password length (at least 8 characters)', () {
+      expect(validatorService.validatePassword('secret123'), isTrue);
+      expect(validatorService.validatePassword('short'), isFalse);
+    });
   });
 }

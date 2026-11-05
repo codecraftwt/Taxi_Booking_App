@@ -5,7 +5,7 @@ import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:saffar_app/core/errors/custom_exception.dart';
 import 'package:saffar_app/core/service_locator.dart';
 
-import '../../../../core/constants/strings.dart';
+import 'package:saffar_app/core/constants/strings.dart';
 
 class RazorpayRepo {
   final Dio _dio = sl<Dio>();

@@ -2,6 +2,7 @@ import 'package:bloc/bloc.dart';
 import 'package:flutter/foundation.dart';
 import 'package:saffar_app/core/models/driver.dart';
 import 'package:saffar_app/features/driver/data/repositories/driver_repo.dart';
+import 'package:saffar_app/features/driver/services/driver_location_service.dart';
 import 'package:saffar_app/core/service_locator.dart';
 
 part 'driver_state.dart';
@@ -20,6 +21,9 @@ class DriverCubit extends Cubit<DriverState> {
       if (driverMap != null && token != null) {
         final driver = Driver.fromMap(Map<String, dynamic>.from(driverMap));
         emit(DriverState(currentDriver: driver, token: token));
+        if (driver.isOnline) {
+          DriverLocationService.instance.startLocationTracking(token: token);
+        }
       }
     } catch (_) {
       // No stored session
@@ -50,6 +54,8 @@ class DriverCubit extends Cubit<DriverState> {
     required String password,
     required String vehicleName,
     required String vehicleNumber,
+    String? vehicleModel,
+    String? email,
   }) async {
     emit(state.copyWith(isLoading: true, error: null));
     try {
@@ -59,6 +65,8 @@ class DriverCubit extends Cubit<DriverState> {
         password: password,
         vehicleName: vehicleName,
         vehicleNumber: vehicleNumber,
+        vehicleModel: vehicleModel,
+        email: email,
       );
       final driver = result['driver'] as Driver;
       final token = result['token'] as String;
@@ -72,16 +80,114 @@ class DriverCubit extends Cubit<DriverState> {
     }
   }
 
-  /// Toggle online/offline
-  Future<void> toggleAvailability(bool active) async {
+  /// Request password reset token
+  Future<Map<String, dynamic>> forgotPassword(String phone) async {
+    emit(state.copyWith(isLoading: true, error: null));
+    try {
+      final res = await _driverRepo.driverForgotPassword(phone: phone);
+      emit(state.copyWith(isLoading: false));
+      return res;
+    } catch (e) {
+      final errMsg = e.toString().replaceAll('CustomException: ', '');
+      emit(state.copyWith(isLoading: false, error: errMsg));
+      rethrow;
+    }
+  }
+
+  /// Reset password and log in
+  Future<void> resetPassword({
+    required String phone,
+    required String newPassword,
+    String? resetToken,
+  }) async {
+    emit(state.copyWith(isLoading: true, error: null));
+    try {
+      final result = await _driverRepo.driverResetPassword(
+        phone: phone,
+        newPassword: newPassword,
+        resetToken: resetToken,
+      );
+      final driver = result['driver'] as Driver;
+      final token = result['token'] as String;
+
+      await _driverRepo.putDriverMapInLocalStorage(driver.toMap());
+      await _driverRepo.putTokenInLocalStorage(token);
+
+      emit(DriverState(currentDriver: driver, token: token));
+    } catch (e) {
+      emit(state.copyWith(isLoading: false, error: e.toString().replaceAll('CustomException: ', '')));
+      rethrow;
+    }
+  }
+
+  /// Upload driver photo
+  Future<void> uploadPhoto(String base64Image) async {
     if (state.token == null) return;
     emit(state.copyWith(isLoading: true, error: null));
     try {
-      final updatedDriver = await _driverRepo.toggleAvailability(state.token!, active);
-      await _driverRepo.putDriverMapInLocalStorage(updatedDriver.toMap());
-      emit(DriverState(currentDriver: updatedDriver, token: state.token));
+      final driver = await _driverRepo.uploadDriverPhoto(state.token!, base64Image);
+      await _driverRepo.putDriverMapInLocalStorage(driver.toMap());
+      emit(DriverState(currentDriver: driver, token: state.token));
     } catch (e) {
       emit(state.copyWith(isLoading: false, error: e.toString().replaceAll('CustomException: ', '')));
+    }
+  }
+
+  /// Toggle online/offline availability
+  Future<bool> toggleAvailability(bool isOnline) async {
+    if (state.token == null) return false;
+    emit(state.copyWith(isLoading: true, error: null));
+
+    try {
+      double? lat;
+      double? lng;
+      double? heading;
+      double? speed;
+
+      if (isOnline) {
+        // 1. Ensure GPS permission and hardware service are enabled
+        final hasPermission = await DriverLocationService.instance.ensureLocationPermissionAndService();
+        if (!hasPermission) {
+          emit(state.copyWith(
+            isLoading: false,
+            error: 'GPS location permission is required to go online and receive ride bookings.',
+          ));
+          return false;
+        }
+
+        // 2. Fetch immediate location fix
+        final loc = await DriverLocationService.instance.getCurrentLocation();
+        lat = loc?.latitude;
+        lng = loc?.longitude;
+        heading = loc?.heading;
+        speed = loc?.speed;
+      }
+
+      // 3. Update status on backend
+      final updatedDriver = await _driverRepo.toggleAvailability(
+        token: state.token!,
+        isOnline: isOnline,
+        latitude: lat,
+        longitude: lng,
+        heading: heading,
+        speed: speed,
+      );
+
+      await _driverRepo.putDriverMapInLocalStorage(updatedDriver.toMap());
+      emit(DriverState(currentDriver: updatedDriver, token: state.token));
+
+      // 4. Start or stop background location tracking
+      if (isOnline) {
+        await DriverLocationService.instance.startLocationTracking(token: state.token!);
+      } else {
+        await DriverLocationService.instance.stopLocationTracking();
+      }
+
+      return true;
+    } catch (e) {
+      final errorMsg = e.toString().replaceAll('CustomException: ', '');
+      emit(state.copyWith(isLoading: false, error: errorMsg));
+      return false;
     }
   }
 
@@ -94,6 +200,8 @@ class DriverCubit extends Cubit<DriverState> {
       emit(DriverState(currentDriver: driver, token: state.token));
     } catch (_) {}
   }
+
+  Future<void> fetchProfile() => refreshProfile();
 
   /// Update profile
   Future<void> updateProfile(Map<String, dynamic> fields) async {
@@ -117,6 +225,7 @@ class DriverCubit extends Cubit<DriverState> {
 
   /// Logout
   Future<void> logout() async {
+    await DriverLocationService.instance.stopLocationTracking();
     await _driverRepo.clearDriverLocalStorage();
     emit(const DriverState());
   }

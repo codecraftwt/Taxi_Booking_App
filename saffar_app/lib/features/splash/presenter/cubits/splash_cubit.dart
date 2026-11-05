@@ -3,7 +3,7 @@ import 'package:saffar_app/features/user/presenter/cubits/user_cubit.dart';
 import 'package:saffar_app/features/splash/domain/init_splash_usecase.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../core/errors/failure.dart';
+import 'package:saffar_app/core/errors/failure.dart';
 
 part 'splash_state.dart';
 

@@ -5,6 +5,7 @@ import 'package:saffar_app/core/palette.dart';
 import 'package:saffar_app/features/driver/presenter/cubits/driver_cubit.dart';
 import 'package:saffar_app/features/driver/presenter/screens/driver_shell_screen.dart';
 import 'package:saffar_app/features/driver/presenter/screens/driver_sign_up_screen.dart';
+import 'package:saffar_app/features/driver/presenter/screens/driver_forgot_password_screen.dart';
 import 'package:saffar_app/features/authentication/presenter/screens/role_selection_screen.dart';
 
 class DriverSignInScreen extends StatefulWidget {
@@ -162,7 +163,38 @@ class _DriverSignInScreenState extends State<DriverSignInScreen> {
                       },
                     ),
 
-                    const SizedBox(height: 28),
+                    const SizedBox(height: 8),
+
+                    // Forgot Password Link
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.pushNamed(
+                            context,
+                            DriverForgotPasswordScreen.routeName,
+                            arguments: {
+                              'phone': _phoneController.text.trim(),
+                            },
+                          );
+                        },
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(50, 30),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text(
+                          'Forgot Password?',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: Palette.primary,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 18),
 
                     // Submit Button
                     BlocBuilder<DriverCubit, DriverState>(

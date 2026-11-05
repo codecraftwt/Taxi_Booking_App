@@ -15,10 +15,16 @@ class SignUpAndSaveUserInLocalStorageUsecase {
   Future<Either<Failure, User>> call(
     String name,
     String phone,
-    String password,
-  ) async {
+    String password, {
+    String? email,
+  }) async {
     try {
-      final Map<String, dynamic> data = await _authRepo.signUp(name, phone, password);
+      final Map<String, dynamic> data = await _authRepo.signUp(
+        name,
+        phone,
+        password,
+        email: email,
+      );
 
       final User user = data['user'];
       final String token = data['token'];

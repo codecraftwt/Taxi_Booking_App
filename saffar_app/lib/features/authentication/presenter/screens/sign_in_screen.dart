@@ -1,304 +1,15 @@
-// import 'package:flutter/material.dart';
-// import 'package:flutter_bloc/flutter_bloc.dart';
-// import 'package:saffar_app/features/authentication/presenter/cubits/auth_cubit.dart';
-// import 'package:saffar_app/features/user/presenter/cubits/user_cubit.dart';
-// import 'package:saffar_app/wrapper.dart';
-
-// import '../../../../core/constants/nums.dart';
-// import '../../../../core/palette.dart';
-// import 'package:saffar_app/features/authentication/presenter/screens/role_selection_screen.dart';
-
-// class SignInScreen extends StatefulWidget {
-//   const SignInScreen({Key? key}) : super(key: key);
-
-//   static const String routeName = '/sign_in';
-
-//   @override
-//   State<SignInScreen> createState() => _SignInScreenState();
-// }
-
-// class _SignInScreenState extends State<SignInScreen> {
-//   late final AuthCubit _authCubit;
-
-//   late final TextEditingController _phoneController;
-//   late final TextEditingController _passwordController;
-
-//   late final GlobalKey<FormState> _formKey;
-
-//   late final List<FocusNode> _focusNodes;
-
-//   bool _passwordVisible = false;
-
-//   /// Switches password visibility from true to false
-//   /// and vice versa and [setState]'s it.
-//   void _switchPasswordVisibility() {
-//     setState(() {
-//       _passwordVisible = !_passwordVisible;
-//     });
-//   }
-
-//   /// Unfocuses the keyboard, validates the form
-//   /// then sign in function in called.
-//   void _onSignInButtonPressed() {
-//     FocusScope.of(context).unfocus();
-
-//     if (_formKey.currentState != null && _formKey.currentState!.validate()) {
-//       final String phone = _phoneController.text;
-//       final String password = _passwordController.text;
-
-//       _authCubit.signInGetUserAndTokenAndEmitThem(context, phone, password);
-//     }
-//   }
-
-//   @override
-//   void initState() {
-//     super.initState();
-
-//     _authCubit = context.read<AuthCubit>();
-
-//     _phoneController = TextEditingController();
-//     _passwordController = TextEditingController();
-
-//     _formKey = GlobalKey<FormState>();
-
-//     _focusNodes = List.generate(2, (index) => FocusNode());
-//   }
-
-//   @override
-//   void dispose() {
-//     _phoneController.dispose();
-//     _passwordController.dispose();
-
-//     for (final focusNode in _focusNodes) {
-//       focusNode.dispose();
-//     }
-
-//     super.dispose();
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return BlocListener<UserCubit, UserState>(
-//       listener: (context, userState) {
-//         if (userState.isLoggedIn && mounted) {
-//           Navigator.pushNamedAndRemoveUntil(
-//             context,
-//             Wrapper.routeName,
-//             (route) => false,
-//           );
-//         }
-//       },
-//       child: BlocBuilder<AuthCubit, AuthState>(
-//         builder: (context, state) {
-//           return WillPopScope(
-//             onWillPop: () async {
-//               if (state.loading) return false;
-//               Navigator.pushReplacementNamed(
-//                 context,
-//                 RoleSelectionScreen.routeName,
-//               );
-//               return false;
-//             },
-//             child: Scaffold(
-//               appBar: AppBar(
-//                 backgroundColor: Colors.transparent,
-//                 elevation: 0,
-//                 leading: IconButton(
-//                   icon: const Icon(Icons.arrow_back, color: Colors.black87),
-//                   onPressed: () {
-//                     Navigator.pushReplacementNamed(
-//                       context,
-//                       RoleSelectionScreen.routeName,
-//                     );
-//                   },
-//                 ),
-//               ),
-//               body: SingleChildScrollView(
-//                 keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-//                 child: Padding(
-//                   padding: const EdgeInsets.symmetric(
-//                       horizontal: Nums.horizontalPadding),
-//                   child: SizedBox(
-//                     height: MediaQuery.of(context).size.height - kToolbarHeight - MediaQuery.of(context).padding.top,
-//                     child: Form(
-//                       key: _formKey,
-//                       child: Column(
-//                         mainAxisAlignment: MainAxisAlignment.center,
-//                         mainAxisSize: MainAxisSize.max,
-//                         children: [
-//                           const Text(
-//                             'Saffar',
-//                             style: TextStyle(
-//                               fontSize: 48,
-//                               color: Palette.primary,
-//                               fontWeight: FontWeight.bold,
-//                               fontStyle: FontStyle.italic,
-//                             ),
-//                           ),
-//                           const SizedBox(height: 32),
-
-//                           // Phone text form field
-//                           TextFormField(
-//                             autofocus: true,
-//                             controller: _phoneController,
-//                             validator: (phone) {
-//                               return _authCubit.validatePhone(phone);
-//                             },
-//                             keyboardType: TextInputType.phone,
-//                             focusNode: _focusNodes[0],
-//                             onEditingComplete: () {
-//                               _focusNodes[0].unfocus();
-//                               _focusNodes[1].requestFocus();
-//                             },
-//                             decoration: InputDecoration(
-//                               prefixIcon: Padding(
-//                                 padding: const EdgeInsets.symmetric(
-//                                   horizontal: 12,
-//                                   vertical: 12,
-//                                 ),
-//                                 child: Text(
-//                                   '+91',
-//                                   style: TextStyle(
-//                                     fontSize: 16,
-//                                     color: Theme.of(context).colorScheme.outline,
-//                                   ),
-//                                 ),
-//                               ),
-//                               hintText: 'Enter Phone',
-//                               border: Theme.of(context).inputDecorationTheme.border,
-//                               enabledBorder: Theme.of(context)
-//                                   .inputDecorationTheme
-//                                   .enabledBorder,
-//                               focusedBorder: Theme.of(context)
-//                                   .inputDecorationTheme
-//                                   .focusedBorder,
-//                               errorBorder: Theme.of(context)
-//                                   .inputDecorationTheme
-//                                   .errorBorder,
-//                             ),
-//                           ),
-//                           const SizedBox(height: 16),
-
-//                           // Password text form field
-//                           TextFormField(
-//                             controller: _passwordController,
-//                             validator: (password) {
-//                               return _authCubit.validatePassword(password);
-//                             },
-//                             keyboardType: TextInputType.visiblePassword,
-//                             obscureText: !_passwordVisible,
-//                             focusNode: _focusNodes[1],
-//                             onEditingComplete: () {
-//                               _focusNodes[1].unfocus();
-//                             },
-//                             decoration: InputDecoration(
-//                               hintText: 'Enter Password',
-//                               border: Theme.of(context).inputDecorationTheme.border,
-//                               enabledBorder: Theme.of(context)
-//                                   .inputDecorationTheme
-//                                   .enabledBorder,
-//                               focusedBorder: Theme.of(context)
-//                                   .inputDecorationTheme
-//                                   .focusedBorder,
-//                               errorBorder: Theme.of(context)
-//                                   .inputDecorationTheme
-//                                   .errorBorder,
-//                               suffixIcon: InkWell(
-//                                 onTap: () {
-//                                   _switchPasswordVisibility();
-//                                 },
-//                                 child: !_passwordVisible
-//                                     ? const Icon(Icons.visibility)
-//                                     : const Icon(Icons.visibility_off),
-//                               ),
-//                             ),
-//                           ),
-//                           const SizedBox(height: 32),
-
-//                           // Sign in button
-//                           ElevatedButton(
-//                             onPressed: state.loading
-//                                 ? null
-//                                 : () {
-//                                     _onSignInButtonPressed();
-//                                   },
-//                             style: ElevatedButton.styleFrom(
-//                               textStyle: Theme.of(context)
-//                                   .textTheme
-//                                   .bodyLarge
-//                                   ?.copyWith(fontWeight: FontWeight.bold),
-//                               padding: const EdgeInsets.symmetric(vertical: 18),
-//                             ),
-//                             child: Center(
-//                               child: Text(
-//                                 state.loading ? '...' : 'Sign In',
-//                               ),
-//                             ),
-//                           ),
-//                           const SizedBox(height: 16),
-
-//                           // Or
-//                           const Text('Or'),
-
-//                           // Sign up button
-//                           TextButton(
-//                             onPressed: state.loading
-//                                 ? null
-//                                 : () {
-//                                     _authCubit.toggleAuthScreen();
-//                                   },
-//                             style: TextButton.styleFrom(
-//                               textStyle: Theme.of(context)
-//                                   .textTheme
-//                                   .bodyLarge
-//                                   ?.copyWith(fontWeight: FontWeight.bold),
-//                               padding: const EdgeInsets.symmetric(vertical: 18),
-//                             ),
-//                             child: const Center(child: Text('Sign Up')),
-//                           ),
-
-//                           const SizedBox(height: 8),
-
-//                           // Switch to Driver Mode
-//                           TextButton.icon(
-//                             onPressed: () {
-//                               Navigator.pushReplacementNamed(
-//                                 context,
-//                                 RoleSelectionScreen.routeName,
-//                               );
-//                             },
-//                             icon: const Icon(Icons.drive_eta, size: 20),
-//                             label: const Text('Are you a Driver? Switch Mode'),
-//                           ),
-//                         ],
-//                       ),
-//                     ),
-//                   ),
-//                 ),
-//               ),
-//             ),
-//           );
-//         },
-//       ),
-//     );
-//   }
-// }
-
-
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-
+import 'package:saffar_app/core/palette.dart';
 import 'package:saffar_app/features/authentication/presenter/cubits/auth_cubit.dart';
+import 'package:saffar_app/features/authentication/presenter/screens/reset_password_screen.dart';
+import 'package:saffar_app/features/driver/presenter/screens/driver_sign_in_screen.dart';
+import 'package:saffar_app/features/home/presenter/screens/home.dart';
 import 'package:saffar_app/features/user/presenter/cubits/user_cubit.dart';
 import 'package:saffar_app/wrapper.dart';
 
-import '../../../../core/constants/nums.dart';
-import '../../../../core/palette.dart';
-import 'package:saffar_app/features/authentication/presenter/screens/role_selection_screen.dart';
-
 class SignInScreen extends StatefulWidget {
-  const SignInScreen({super.key});
+  const SignInScreen({Key? key}) : super(key: key);
 
   static const String routeName = '/sign_in';
 
@@ -308,23 +19,14 @@ class SignInScreen extends StatefulWidget {
 
 class _SignInScreenState extends State<SignInScreen> {
   late final AuthCubit _authCubit;
-
-  final TextEditingController _phoneController =
-      TextEditingController();
-  final TextEditingController _passwordController =
-      TextEditingController();
-
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   final FocusNode _phoneFocus = FocusNode();
   final FocusNode _passwordFocus = FocusNode();
 
   bool _passwordVisible = false;
-
-  static const Color _background = Color(0xFFFFFAF6);
-  static const Color _textColor = Color(0xFF252525);
-  static const Color _mutedColor = Color(0xFF777777);
-  static const Color _borderColor = Color(0xFFEAE5E0);
 
   @override
   void initState() {
@@ -360,228 +62,18 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   void _goBack() {
-    Navigator.pushReplacementNamed(
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    } else {
+      Navigator.pushReplacementNamed(context, '/splash');
+    }
+  }
+
+  void _showForgotPasswordModal() {
+    Navigator.pushNamed(
       context,
-      RoleSelectionScreen.routeName,
-    );
-  }
-
-  InputDecoration _inputDecoration({
-    required String hint,
-    required IconData icon,
-    Widget? prefix,
-    Widget? suffix,
-  }) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: const TextStyle(
-        fontSize: 13,
-        color: Color(0xFFAAAAAA),
-      ),
-      prefixIcon: Icon(
-        icon,
-        color: Palette.primary,
-        size: 21,
-      ),
-      prefix: prefix,
-      suffixIcon: suffix,
-      filled: true,
-      fillColor: Colors.white,
-      isDense: true,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 16,
-        vertical: 18,
-      ),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(15),
-        borderSide: const BorderSide(color: _borderColor),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(15),
-        borderSide: const BorderSide(color: _borderColor),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(15),
-        borderSide: BorderSide(
-          color: Palette.primary,
-          width: 1.5,
-        ),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(15),
-        borderSide: const BorderSide(color: Colors.redAccent),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(15),
-        borderSide: const BorderSide(
-          color: Colors.redAccent,
-          width: 1.5,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBrand() {
-    return Column(
-      children: [
-        Container(
-          width: 82,
-          height: 82,
-          decoration: BoxDecoration(
-            color: Palette.primary.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(26),
-          ),
-          child: Icon(
-            Icons.local_taxi_rounded,
-            size: 50,
-            color: Palette.primary,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Saffar',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 43,
-            fontWeight: FontWeight.w900,
-            fontStyle: FontStyle.italic,
-            letterSpacing: 1,
-            color: Palette.primary,
-          ),
-        ),
-        const SizedBox(height: 5),
-        const Text(
-          'YOUR JOURNEY, OUR PRIORITY',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 9,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.6,
-            color: _mutedColor,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPhoneField() {
-    return TextFormField(
-      controller: _phoneController,
-      focusNode: _phoneFocus,
-      autofocus: false,
-      keyboardType: TextInputType.phone,
-      textInputAction: TextInputAction.next,
-      validator: _authCubit.validatePhone,
-      onFieldSubmitted: (_) {
-        _passwordFocus.requestFocus();
-      },
-      decoration: _inputDecoration(
-        hint: 'Enter your phone number',
-        icon: Icons.phone_android_rounded,
-        prefix: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Center(
-            widthFactor: 1,
-            child: Text(
-              '+91',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: Palette.primary,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPasswordField() {
-    return TextFormField(
-      controller: _passwordController,
-      focusNode: _passwordFocus,
-      obscureText: !_passwordVisible,
-      keyboardType: TextInputType.visiblePassword,
-      textInputAction: TextInputAction.done,
-      validator: _authCubit.validatePassword,
-      onFieldSubmitted: (_) {
-        _onSignInButtonPressed();
-      },
-      decoration: _inputDecoration(
-        hint: 'Enter your password',
-        icon: Icons.lock_outline_rounded,
-        suffix: IconButton(
-          tooltip: _passwordVisible
-              ? 'Hide password'
-              : 'Show password',
-          onPressed: _switchPasswordVisibility,
-          icon: Icon(
-            _passwordVisible
-                ? Icons.visibility_off_rounded
-                : Icons.visibility_rounded,
-            color: _mutedColor,
-            size: 21,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSignInButton(bool loading) {
-    return SizedBox(
-      width: double.infinity,
-      height: 55,
-      child: ElevatedButton(
-        onPressed: loading ? null : _onSignInButtonPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Palette.primary,
-          foregroundColor: Colors.white,
-          disabledBackgroundColor:
-              Palette.primary.withValues(alpha: 0.55),
-          elevation: 2,
-          shadowColor: Palette.primary.withValues(alpha: 0.25),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-        child: loading
-            ? const SizedBox(
-                width: 23,
-                height: 23,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2.5,
-                ),
-              )
-            : const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Sign In',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  SizedBox(width: 10),
-                  Icon(Icons.arrow_forward_rounded, size: 20),
-                ],
-              ),
-      ),
-    );
-  }
-
-  Widget _buildLabel(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: _textColor,
-        ),
-      ),
+      ResetPasswordScreen.routeName,
+      arguments: {'phone': _phoneController.text.trim()},
     );
   }
 
@@ -592,214 +84,659 @@ class _SignInScreenState extends State<SignInScreen> {
         if (userState.isLoggedIn && mounted) {
           Navigator.pushNamedAndRemoveUntil(
             context,
-            Wrapper.routeName,
+            HomeScreen.routeName,
             (route) => false,
           );
         }
       },
       child: BlocBuilder<AuthCubit, AuthState>(
         builder: (context, state) {
-          return PopScope(
-            canPop: false,
-            onPopInvokedWithResult: (didPop, result) {
-              if (!didPop && !state.loading) {
-                _goBack();
-              }
-            },
-            child: Scaffold(
-              backgroundColor: _background,
-              body: SafeArea(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    return SingleChildScrollView(
-                      keyboardDismissBehavior:
-                          ScrollViewKeyboardDismissBehavior.onDrag,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: Nums.horizontalPadding,
-                        vertical: 12,
-                      ),
+          return Scaffold(
+            backgroundColor: Colors.white,
+            body: SafeArea(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 1. Top Bar: Back Arrow, Brand Nav Icon + Sign In, Avatar Icon
+                    _buildTopBar(context),
+
+                    const SizedBox(height: 16),
+
+                    // 2. Role Segmented Bar: Rider vs Driver Partner
+                    _buildRoleSegment(context),
+
+                    const SizedBox(height: 20),
+
+                    // 3. SAFFAR MOBILITY Dot & Headline
+                    _buildHeader(),
+
+                    const SizedBox(height: 24),
+
+                    // 4. Input Form: Phone + Password
+                    Form(
+                      key: _formKey,
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Material(
-                              color: Colors.white,
-                              shape: const CircleBorder(),
-                              child: InkWell(
-                                customBorder: const CircleBorder(),
-                                onTap: state.loading ? null : _goBack,
-                                child: const SizedBox(
-                                  width: 44,
-                                  height: 44,
-                                  child: Icon(
-                                    Icons.arrow_back_rounded,
-                                    color: _textColor,
-                                    size: 21,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 22),
-
-                          _buildBrand(),
-
-                          const SizedBox(height: 32),
-
+                          // Phone Label & Field
                           const Text(
-                            'Welcome back!',
-                            style: TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.6,
-                              color: _textColor,
-                            ),
-                          ),
-
-                          const SizedBox(height: 8),
-
-                          const Text(
-                            'Sign in to continue your journey with Saffar.',
+                            'Phone Number',
                             style: TextStyle(
                               fontSize: 13,
-                              height: 1.5,
-                              color: _mutedColor,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF173B67),
                             ),
                           ),
+                          const SizedBox(height: 8),
+                          _buildPhoneField(),
 
-                          const SizedBox(height: 25),
+                          const SizedBox(height: 18),
 
-                          Form(
-                            key: _formKey,
-                            child: Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.stretch,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _buildLabel('Phone Number'),
-                                _buildPhoneField(),
-
-                                const SizedBox(height: 18),
-
-                                _buildLabel('Password'),
-                                _buildPasswordField(),
-
-                                const SizedBox(height: 26),
-
-                                _buildSignInButton(state.loading),
-                              ],
+                          // Password Label & Field
+                          const Text(
+                            'Password',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF173B67),
                             ),
                           ),
-
-                          const SizedBox(height: 22),
-
-                          const Row(
-                            children: [
-                              Expanded(
-                                child: Divider(
-                                  color: _borderColor,
-                                ),
-                              ),
-                              Padding(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                ),
-                                child: Text(
-                                  'NEW TO SAFFAR?',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 1.1,
-                                    color: _mutedColor,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                child: Divider(
-                                  color: _borderColor,
-                                ),
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          OutlinedButton(
-                            onPressed: state.loading
-                                ? null
-                                : () {
-                                    _authCubit.toggleAuthScreen();
-                                  },
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Palette.primary,
-                              minimumSize: const Size.fromHeight(51),
-                              side: BorderSide(
-                                color: Palette.primary.withValues(
-                                  alpha: 0.40,
-                                ),
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                            ),
-                            child: const Text(
-                              'Create an Account',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          TextButton.icon(
-                            onPressed:
-                                state.loading ? null : _goBack,
-                            icon: Icon(
-                              Icons.local_taxi_rounded,
-                              size: 20,
-                              color: Palette.primary,
-                            ),
-                            label: Text(
-                              'Are you a driver? Switch mode',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: Palette.primary,
-                              ),
-                            ),
-                          ),
+                          const SizedBox(height: 8),
+                          _buildPasswordField(),
 
                           const SizedBox(height: 10),
 
-                          const Center(
-                            child: Padding(
-                              padding: EdgeInsets.only(bottom: 8),
-                              child: Text(
-                                'FAST  •  RELIABLE  •  SAFE',
+                          // Forgot Password
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: GestureDetector(
+                              onTap: _showForgotPasswordModal,
+                              child: const Text(
+                                'Forgot Password?',
                                 style: TextStyle(
-                                  fontSize: 10,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w700,
-                                  letterSpacing: 1,
-                                  color: Color(0xFFAAAAAA),
+                                  color: Color(0xFF173B67),
                                 ),
                               ),
                             ),
                           ),
+
+                          const SizedBox(height: 22),
+
+                          // 5. Log In Button
+                          _buildLogInButton(state.loading),
                         ],
                       ),
-                    );
-                  },
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // 6. Or continue with Divider
+                    const Row(
+                      children: [
+                        Expanded(
+                          child: Divider(
+                            color: Color(0xFFE2E8F0),
+                            thickness: 1,
+                          ),
+                        ),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 14),
+                          child: Text(
+                            'Or continue with',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF64748B),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Divider(
+                            color: Color(0xFFE2E8F0),
+                            thickness: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    // 7. Social Logins: Google & Apple
+                    _buildSocialButtons(context),
+
+                    const SizedBox(height: 26),
+
+                    // 8. Register Footer Link
+                    _buildRegisterFooter(context),
+
+                    const SizedBox(height: 16),
+                  ],
                 ),
               ),
             ),
           );
         },
       ),
+    );
+  }
+
+  // 1. Top Bar
+  Widget _buildTopBar(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        // Back Button
+        GestureDetector(
+          onTap: _goBack,
+          child: Container(
+            width: 36,
+            height: 36,
+            decoration: const BoxDecoration(
+              color: Colors.transparent,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.arrow_back_rounded,
+              color: Color(0xFF173B67),
+              size: 22,
+            ),
+          ),
+        ),
+
+        // Brand Icon & Screen Title
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 26,
+              height: 26,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF6B00),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Center(
+                child: Icon(
+                  Icons.near_me_rounded,
+                  color: Colors.white,
+                  size: 15,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              'Sign In',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF173B67),
+              ),
+            ),
+          ],
+        ),
+
+        // Right Profile Avatar Circle
+        Container(
+          width: 34,
+          height: 34,
+          decoration: const BoxDecoration(
+            color: Color(0xFF8B4513),
+            shape: BoxShape.circle,
+          ),
+          child: const Center(
+            child: Icon(
+              Icons.person,
+              color: Colors.white,
+              size: 20,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 2. Role Segment Toggle: Rider vs Driver Partner
+  Widget _buildRoleSegment(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEEF2FF),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Row(
+        children: [
+          // Rider (Active)
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF6B00),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFFF6B00).withValues(alpha: 0.28),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.electric_rickshaw_rounded,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                  SizedBox(width: 6),
+                  Text(
+                    'Rider',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Driver Partner (Inactive)
+          Expanded(
+            child: InkWell(
+              onTap: () {
+                Navigator.pushReplacementNamed(
+                  context,
+                  DriverSignInScreen.routeName,
+                );
+              },
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.directions_car_outlined,
+                      color: Color(0xFF173B67),
+                      size: 16,
+                    ),
+                    SizedBox(width: 6),
+                    Text(
+                      'Driver Partner',
+                      style: TextStyle(
+                        color: Color(0xFF173B67),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 3. SAFFAR MOBILITY Tag & Headline
+  Widget _buildHeader() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: const BoxDecoration(
+                color: Color(0xFFFF8500),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 6),
+            const Text(
+              'SAFFAR MOBILITY',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF173B67),
+                letterSpacing: 0.8,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Welcome Back',
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w900,
+            color: Color(0xFF173B67),
+            letterSpacing: -0.5,
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Log in to book your daily commute across the city',
+          style: TextStyle(
+            fontSize: 13,
+            color: Color(0xFF64748B),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 4. Phone Input Field with Country Code
+  Widget _buildPhoneField() {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          // Country prefix
+          const Padding(
+            padding: EdgeInsets.only(left: 14),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'IN  +91',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: Palette.neutral,
+                  ),
+                ),
+                SizedBox(width: 4),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 18,
+                  color: Color(0xFF64748B),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            width: 1,
+            height: 22,
+            color: const Color(0xFFCBD5E1),
+          ),
+          const SizedBox(width: 10),
+
+          // Text Field
+          Expanded(
+            child: TextFormField(
+              controller: _phoneController,
+              focusNode: _phoneFocus,
+              keyboardType: TextInputType.phone,
+              textInputAction: TextInputAction.next,
+              validator: _authCubit.validatePhone,
+              onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: Palette.neutral,
+              ),
+              decoration: const InputDecoration(
+                hintText: '98765 43210',
+                hintStyle: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF94A3B8),
+                ),
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+        ],
+      ),
+    );
+  }
+
+  // 5. Password Input Field
+  Widget _buildPasswordField() {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: TextFormField(
+        controller: _passwordController,
+        focusNode: _passwordFocus,
+        obscureText: !_passwordVisible,
+        keyboardType: TextInputType.visiblePassword,
+        textInputAction: TextInputAction.done,
+        validator: _authCubit.validatePassword,
+        onFieldSubmitted: (_) => _onSignInButtonPressed(),
+        style: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+          color: Palette.neutral,
+        ),
+        decoration: InputDecoration(
+          prefixIcon: const Icon(
+            Icons.lock_outline_rounded,
+            size: 20,
+            color: Color(0xFF64748B),
+          ),
+          hintText: 'Enter your password',
+          hintStyle: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF94A3B8),
+          ),
+          suffixIcon: IconButton(
+            onPressed: _switchPasswordVisibility,
+            icon: Icon(
+              _passwordVisible
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+              size: 20,
+              color: const Color(0xFF64748B),
+            ),
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 14),
+        ),
+      ),
+    );
+  }
+
+  // 6. Log In Button
+  Widget _buildLogInButton(bool loading) {
+    return InkWell(
+      onTap: loading ? null : _onSignInButtonPressed,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: double.infinity,
+        height: 50,
+        decoration: BoxDecoration(
+          color: const Color(0xFFFF6B00),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFF6B00).withValues(alpha: 0.35),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Center(
+          child: loading
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2.5,
+                  ),
+                )
+              : const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Log In',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Icon(
+                      Icons.arrow_forward_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+
+  // 7. Social Buttons: Google & Apple
+  Widget _buildSocialButtons(BuildContext context) {
+    return Row(
+      children: [
+        // Google Button
+        Expanded(
+          child: InkWell(
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Google Sign In coming soon!')),
+              );
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              height: 48,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 20,
+                    height: 20,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'G',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF4285F4),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Google',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Palette.neutral,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+
+        // Apple Button
+        Expanded(
+          child: InkWell(
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Apple Sign In coming soon!')),
+              );
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              height: 48,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.apple,
+                    color: Colors.black,
+                    size: 20,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Apple',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Palette.neutral,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 8. Register Footer
+  Widget _buildRegisterFooter(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Text(
+          "Don't have an account? ",
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF1E293B),
+          ),
+        ),
+        GestureDetector(
+          onTap: () {
+            _authCubit.toggleAuthScreen();
+          },
+          child: const Text(
+            'Register',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFFFF6B00),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -12,7 +12,10 @@ class Strings {
     return url;
   }
 
+  static String get socketUrl => baseApiUrl.replaceAll('/api', '');
+
   static String mapApiKey = dotenv.env['TOMTOM_MAP_API'] ?? 'dummy_tomtom_api_key';
+  static String googleMapsApiKey = dotenv.env['GOOGLE_MAPS_API_KEY'] ?? dotenv.env['MAPS_API_KEY'] ?? '';
   static String razorpayKeyId = dotenv.env['RAZORPAY_KEY_ID'] ?? 'dummy_razorpay_key_id';
   static String razorpayKeySecret = dotenv.env['RAZORPAY_KEY_SECRET'] ?? 'dummy_razorpay_key_secret';
   static const String saffarCaption = 'Ride with ease and comfort.';

@@ -5,7 +5,7 @@ import 'package:latlong2/latlong.dart';
 /// Address
 class Address {
   const Address({
-    required this.id,
+    this.id = '',
     this.place,
     required this.street,
     this.state,
@@ -130,9 +130,51 @@ class Address {
     );
   }
 
+  /// Converts a JSON received from Google Maps Geocoding / Places API to Address Model
+  factory Address.fromGoogleGeocodeMap(Map<String, dynamic> map) {
+    final GenerateIdUsecase generateIdUsecase = GenerateIdUsecase();
+    final geometry = map['geometry'] as Map<String, dynamic>? ?? {};
+    final location = geometry['location'] as Map<String, dynamic>? ?? {};
+    final double lat = (location['lat'] as num?)?.toDouble() ?? 0.0;
+    final double lon = (location['lng'] as num?)?.toDouble() ?? 0.0;
+    final String formattedAddress = map['formatted_address']?.toString() ?? 'Unnamed Location';
+    final List components = (map['address_components'] as List?) ?? [];
+
+    String street = formattedAddress.split(',').first;
+    String? place;
+    String? state;
+    String? country;
+    String? pincode;
+
+    for (final comp in components) {
+      if (comp is Map) {
+        final types = (comp['types'] as List?) ?? [];
+        if (types.contains('locality') || types.contains('sublocality')) {
+          place ??= comp['long_name']?.toString();
+        } else if (types.contains('administrative_area_level_1')) {
+          state = comp['long_name']?.toString();
+        } else if (types.contains('country')) {
+          country = comp['long_name']?.toString();
+        } else if (types.contains('postal_code')) {
+          pincode = comp['long_name']?.toString();
+        }
+      }
+    }
+
+    return Address(
+      id: map['place_id']?.toString() ?? generateIdUsecase.call(),
+      place: place ?? street,
+      street: street,
+      state: state ?? 'Karnataka',
+      country: country ?? 'India',
+      latLng: LatLng(lat, lon),
+      pincode: pincode ?? '',
+    );
+  }
+
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
+      'id': id.isNotEmpty ? id : GenerateIdUsecase()(),
       'place': place,
       'street': street,
       'state': state,

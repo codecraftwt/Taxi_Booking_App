@@ -1,11 +1,2 @@
-import 'package:saffar_app/features/user/data/repositories/user_repo.dart';
-import 'package:saffar_app/core/service_locator.dart';
-
-class DeleteTokenFromLocalStorageUsecase {
-  final UserRepo _userRepo = sl<UserRepo>();
-
-  /// Delete token from local storage
-  Future<bool> call() {
-    return _userRepo.deleteTokenFromLocalStorage();
-  }
-}
+// Canonical export
+export 'package:saffar_app/features/user/profile/domain/usecases/delete_token_from_local_storage_usecase.dart';

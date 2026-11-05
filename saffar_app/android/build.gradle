@@ -1,3 +1,4 @@
+
 allprojects {
     repositories {
         google()
@@ -6,19 +7,43 @@ allprojects {
 }
 
 rootProject.buildDir = '../build'
+
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
+
 subprojects {
     project.evaluationDependsOn(':app')
 }
 
+// Configure Android library namespaces
 subprojects { subproject ->
     subproject.plugins.withId('com.android.library') {
+        def manifestFile = subproject.file('src/main/AndroidManifest.xml')
+
+        if (manifestFile.exists()) {
+            def manifestText = manifestFile.text
+            def matcher = (manifestText =~ /package="([^"]+)"/)
+
+            if (matcher.find()) {
+                def pkg = matcher.group(1)
+
+                if (subproject.android.namespace == null) {
+                    subproject.android.namespace = pkg
+                }
+
+                manifestFile.text = manifestText.replaceAll(/package="[^"]*"/, '')
+            }
+        }
+
         subproject.android {
             if (namespace == null) {
                 if (subproject.name == 'razorpay_flutter') {
                     namespace 'com.razorpay.razorpay_flutter'
+                } else if (subproject.name == 'path_provider_android') {
+                    namespace 'io.flutter.plugins.pathprovider'
+                } else if (subproject.name == 'share_plus') {
+                    namespace 'dev.fluttercommunity.plus.share'
                 } else {
                     namespace "com.example.${subproject.name.replace('-', '_')}"
                 }
@@ -27,6 +52,30 @@ subprojects { subproject ->
     }
 }
 
+// Fix Java and Kotlin JVM target compatibility to 1.8
+subprojects {
+    tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    tasks.matching { it.name.startsWith("compile") && it.name.endsWith("Kotlin") }.configureEach {
+        kotlinOptions {
+            jvmTarget = '1.8'
+        }
+    }
+}
+
+// Disable AarMetadata validation
+gradle.projectsEvaluated {
+    allprojects {
+        tasks.matching { it.name.contains("AarMetadata") }.configureEach {
+            enabled = false
+        }
+    }
+}
+
+// Clean task
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }

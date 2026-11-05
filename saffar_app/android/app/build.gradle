@@ -24,7 +24,8 @@ if (flutterVersionName == null) {
 
 android {
     namespace "com.example.saffar_app"
-    compileSdkVersion flutter.compileSdkVersion
+    compileSdkVersion 36
+    compileSdk = 36
     ndkVersion flutter.ndkVersion
 
     compileOptions {
@@ -51,16 +52,6 @@ android {
     buildTypes {
         release {
             signingConfig signingConfigs.debug
-        }
-    }
-
-    flavorDimensions 'default'
-
-    productFlavors {
-        dev {
-            dimension 'default'
-            resValue 'string', 'saffar_app_dev', 'dev flavor'
-            applicationIdSuffix '.dev'
         }
     }
 }

@@ -7,10 +7,10 @@ import 'package:latlong2/latlong.dart';
 import 'package:saffar_app/features/payment/domain/usecases/pay_via_razorpay_usecase.dart';
 import 'package:saffar_app/features/ride/domain/usecases/add_ride_usecase.dart';
 
-import '../../../../core/models/address.dart';
-import '../../../../core/models/driver.dart';
-import '../../../../core/models/ride.dart';
-import '../../../user/data/models/user.dart';
+import 'package:saffar_app/core/models/address.dart';
+import 'package:saffar_app/core/models/driver.dart';
+import 'package:saffar_app/core/models/ride.dart';
+import 'package:saffar_app/features/user/profile/data/models/user.dart';
 
 part 'payment_state.dart';
 

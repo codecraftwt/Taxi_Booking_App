@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:saffar_app/features/authentication/presenter/cubits/auth_cubit.dart';
 import 'package:saffar_app/features/authentication/presenter/screens/sign_in_screen.dart';
 import 'package:saffar_app/features/authentication/presenter/screens/sign_up_screen.dart';
+import 'package:saffar_app/features/home/presenter/screens/home.dart';
 import 'package:saffar_app/features/user/presenter/cubits/user_cubit.dart';
 import 'package:saffar_app/wrapper.dart';
 
@@ -46,7 +47,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         if (userState.isLoggedIn) {
           Navigator.pushNamedAndRemoveUntil(
             context,
-            Wrapper.routeName,
+            HomeScreen.routeName,
             (route) => false,
           );
         }

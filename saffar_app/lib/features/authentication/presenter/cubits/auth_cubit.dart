@@ -9,6 +9,7 @@ import 'package:saffar_app/features/authentication/domain/usecases/validate_name
 import 'package:saffar_app/features/authentication/domain/usecases/validate_password_usecase.dart';
 import 'package:saffar_app/features/authentication/domain/usecases/validate_phone_usecase.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:saffar_app/features/home/presenter/screens/home.dart';
 import 'package:saffar_app/wrapper.dart';
 
 part 'auth_state.dart';
@@ -74,7 +75,7 @@ class AuthCubit extends Cubit<AuthState> {
           if (context.mounted) {
             Navigator.pushNamedAndRemoveUntil(
               context,
-              Wrapper.routeName,
+              HomeScreen.routeName,
               (route) => false,
             );
           }
@@ -92,14 +93,16 @@ class AuthCubit extends Cubit<AuthState> {
     BuildContext context,
     String name,
     String phone,
-    String password,
-  ) async {
+    String password, {
+    String? email,
+  }) async {
     emit(state.copyWith(loading: true));
 
     final result = await _signUpAndSaveUserInLocalStorageUsecase.call(
       name,
       phone,
       password,
+      email: email,
     );
 
     result.fold(
@@ -114,7 +117,7 @@ class AuthCubit extends Cubit<AuthState> {
           if (context.mounted) {
             Navigator.pushNamedAndRemoveUntil(
               context,
-              Wrapper.routeName,
+              HomeScreen.routeName,
               (route) => false,
             );
           }

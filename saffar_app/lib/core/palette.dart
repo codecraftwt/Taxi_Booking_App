@@ -1,34 +1,49 @@
 import 'package:flutter/material.dart';
 
-/// [Palette] stores the colors and color schemes used 
-/// in the app.
+/// [Palette] stores the Stitch design system colors and color schemes used 
+/// in the Saffar application.
 class Palette {
-  // The colors used in the app
-  static const Color primary = Color(0xFFFF6F00);
+  // Stitch Design System Colors
+  static const Color primary = Color(0xFFFF6B00); // Saffar Warm Orange
   static const Color onPrimary = Colors.white;
 
-  static const Color primaryContainer = Color(0xFFFF9C36);
-  static const Color onPrimaryContainer = Colors.black;
+  static const Color primaryContainer = Color(0xFFFFE6D5);
+  static const Color onPrimaryContainer = Color(0xFF6A2800);
 
-  static const Color secondary = Colors.grey;
-  static const Color onSecondary = Colors.black;
+  static const Color secondary = Color(0xFF173B67); // Saffar Deep Navy Blue
+  static const Color onSecondary = Colors.white;
 
-  static const Color secondaryContainer = Colors.grey;
-  static const Color onSecondaryContainer = Colors.white;
+  static const Color secondaryContainer = Color(0xFFE5EDF7);
+  static const Color onSecondaryContainer = Color(0xFF173B67);
 
-  static const Color tertiary = Colors.black;
+  static const Color tertiary = Color(0xFF20A46B); // Saffar Emerald Green
   static const Color onTertiary = Colors.white;
 
-  static const Color tertiaryContainer = Color(0xFF424242);
-  static const Color onTertiaryContainer = Colors.white;
+  static const Color tertiaryContainer = Color(0xFFE2F7ED);
+  static const Color onTertiaryContainer = Color(0xFF0F5A38);
 
-  static const Color background = Color(0xFFF9F9F9);
-  static const Color onBackground = Colors.black;
+  static const Color neutral = Color(0xFF172033); // Dark Slate Neutral
+  static const Color neutralVariant = Color(0xFF64748B);
 
-  static const Color error = Colors.redAccent;
+  static const Color background = Color(0xFFF6F8FC);
+  static const Color onBackground = Color(0xFF172033);
+
+  static const Color surface = Colors.white;
+  static const Color onSurface = Color(0xFF172033);
+
+  static const Color error = Color(0xFFDC2626);
   static const Color onError = Colors.white;
 
-  static const Color outline = Colors.grey;
+  static const Color success = Color(0xFF20A46B); // Emerald Green
+  static const Color card = Colors.white; // Card Background
+
+  static const Color outline = Color(0xFFE2E8F0);
+  static const Color cardBorder = Color(0xFFE2E8F0);
+
+  // Badges & Accents
+  static const Color badgeFastest = Color(0xFFFF6B00);
+  static const Color badgeValue = Color(0xFF20A46B);
+  static const Color sosRed = Color(0xFFB91C1C);
 
   // Light color scheme
   static const ColorScheme lightColorScheme = ColorScheme(
@@ -44,10 +59,10 @@ class Palette {
     onTertiary: onTertiary,
     tertiaryContainer: tertiaryContainer,
     onTertiaryContainer: onTertiaryContainer,
-    surface: background,
-    onSurface: onBackground,
-    error: Colors.red,
-    onError: Colors.white,
+    surface: surface,
+    onSurface: onSurface,
+    error: error,
+    onError: onError,
     outline: outline,
     brightness: Brightness.light,
   );

@@ -9,6 +9,8 @@ import 'package:saffar_app/features/driver/presenter/cubits/driver_cubit.dart';
 import 'package:saffar_app/features/driver/presenter/cubits/driver_dashboard_cubit.dart';
 import 'package:saffar_app/features/driver/presenter/cubits/driver_earnings_cubit.dart';
 import 'package:saffar_app/features/driver/presenter/cubits/driver_rides_cubit.dart';
+import 'package:saffar_app/features/driver/presenter/cubits/vehicle_cubit.dart';
+import 'package:saffar_app/features/driver/presenter/cubits/ride_request_cubit.dart';
 import 'package:saffar_app/features/user/presenter/cubits/user_cubit.dart';
 import 'package:saffar_app/core/palette.dart';
 import 'package:saffar_app/core/router.dart';
@@ -49,6 +51,8 @@ class MyApp extends StatelessWidget {
         BlocProvider(create: (_) => DriverDashboardCubit()),
         BlocProvider(create: (_) => DriverEarningsCubit()),
         BlocProvider(create: (_) => DriverRidesCubit()),
+        BlocProvider(create: (_) => VehicleCubit()),
+        BlocProvider(create: (_) => RideRequestCubit()),
       ],
       child: MaterialApp(
         title: 'Saffar app',
