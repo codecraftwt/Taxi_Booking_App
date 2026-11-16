@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -8,6 +9,9 @@ import 'package:saffar_app/core/service_locator.dart';
 import 'package:saffar_app/core/services/map_service.dart';
 import 'package:saffar_app/core/widgets/map_marker_widgets.dart';
 import 'package:saffar_app/features/ride/data/repositories/ride_repo.dart';
+import 'package:saffar_app/features/driver/data/repositories/driver_repo.dart';
+import 'package:saffar_app/features/user/ride/services/customer_socket_service.dart';
+import 'package:saffar_app/features/location/data/repositories/location_repo.dart';
 import 'package:saffar_app/features/search_places_and_get_route/data/repositories/map_route_repo.dart';
 import 'package:saffar_app/features/ride/presenter/screens/active_trip_screen.dart';
 import 'package:saffar_app/features/user/presenter/cubits/user_cubit.dart';
@@ -87,7 +91,36 @@ class _RideConfirmationScreenState extends State<RideConfirmationScreen> {
   String _selectedPayment = 'Cash';
   final String _appliedCoupon = 'SAVE30 applied';
 
-  late final List<RideOptionItem> _options;
+  List<RideOptionItem> _options = [];
+  double? _calculatedRouteKm;
+
+  double get _parsedDistanceKm {
+    if (_calculatedRouteKm != null && _calculatedRouteKm! > 0) {
+      return _calculatedRouteKm!;
+    }
+    final raw = widget.distanceText.replaceAll(RegExp(r'[^0-9.]'), '');
+    final parsed = double.tryParse(raw);
+    if (parsed != null && parsed > 0) return parsed;
+    final distKm = const Distance().as(
+      LengthUnit.Kilometer,
+      _pickupLocation,
+      _destinationLocation,
+    );
+    return distKm > 0 ? (distKm * 1.25) : 4.5;
+  }
+
+  String get _displayDistanceText {
+    if (_calculatedRouteKm != null && _calculatedRouteKm! > 0) {
+      return '${_calculatedRouteKm!.toStringAsFixed(1)} km';
+    }
+    if (widget.distanceText.isNotEmpty) return widget.distanceText;
+    return '${_parsedDistanceKm.toStringAsFixed(1)} km';
+  }
+
+  String get _displayDurationText {
+    final mins = math.max(3, (_parsedDistanceKm * 2.5).round());
+    return '$mins mins';
+  }
 
   @override
   void initState() {
@@ -96,71 +129,147 @@ class _RideConfirmationScreenState extends State<RideConfirmationScreen> {
 
     _pickupLocation = (widget.pickupLat != null && widget.pickupLon != null)
         ? LatLng(widget.pickupLat!, widget.pickupLon!)
-        : const LatLng(16.7050, 74.2433);
+        : MapConfig.defaultCenter;
 
     _destinationLocation = (widget.destLat != null && widget.destLon != null)
         ? LatLng(widget.destLat!, widget.destLon!)
-        : const LatLng(16.6959, 74.4556);
+        : MapConfig.defaultCenter;
 
-    _loadRoute();
+    if (widget.pickupLat == null || widget.pickupLon == null) {
+      _acquireCurrentPickupGps();
+    } else {
+      _loadRoute();
+    }
+
+    _buildOptionsFromFares(null);
+    _fetchLiveFares();
+    CustomerSocketService.instance.fareUpdatedNotifier.addListener(_onFareConfigUpdated);
+  }
+
+  @override
+  void dispose() {
+    CustomerSocketService.instance.fareUpdatedNotifier.removeListener(_onFareConfigUpdated);
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  void _onFareConfigUpdated() {
+    _fetchLiveFares();
+  }
+
+  Future<void> _fetchLiveFares() async {
+    try {
+      final fares = await sl<DriverRepo>().getVehicleFares();
+      if (fares.isNotEmpty && mounted) {
+        setState(() {
+          _buildOptionsFromFares(fares);
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _buildOptionsFromFares(List<Map<String, dynamic>>? fares) {
+    Map<String, dynamic>? findFare(String cat) {
+      if (fares == null) return null;
+      try {
+        return fares.firstWhere(
+          (f) => f['category']?.toString().toLowerCase() == cat.toLowerCase(),
+          orElse: () => {},
+        );
+      } catch (_) {
+        return null;
+      }
+    }
+
+    int calcPrice(Map<String, dynamic>? f, double defaultBase, double defaultPerKm, double defaultMin) {
+      final base = (f?['base_fare'] as num?)?.toDouble() ?? defaultBase;
+      final perKm = (f?['per_km'] as num?)?.toDouble() ?? defaultPerKm;
+      final perMin = (f?['per_minute'] as num?)?.toDouble() ?? 1.5;
+      final minFare = (f?['minimum_fare'] as num?)?.toDouble() ?? defaultMin;
+      final estDuration = math.max(1, (_parsedDistanceKm * 2.5).round());
+      final total = base + (_parsedDistanceKm * perKm) + (estDuration * perMin);
+      return math.max(minFare.round(), total.round());
+    }
+
+    final bikeFare = findFare('Bike');
+    final autoFare = findFare('Auto');
+    final carFare = findFare('Car');
+    final sedanFare = findFare('Prime Sedan') ?? findFare('Sedan');
+
+    final bikeP = calcPrice(bikeFare, 20.0, 8.0, 30.0);
+    final autoP = calcPrice(autoFare, 30.0, 12.0, 40.0);
+    final carP = calcPrice(carFare, 50.0, 15.0, 70.0);
+    final sedanP = calcPrice(sedanFare, 70.0, 18.0, 90.0);
 
     _options = [
-      const RideOptionItem(
+      RideOptionItem(
         id: 'bike',
         name: 'Saffar Bike',
         badge: 'FASTEST',
-        badgeBg: Color(0xFFE0F2FE),
-        badgeTextColor: Color(0xFF0369A1),
+        badgeBg: const Color(0xFFE0F2FE),
+        badgeTextColor: const Color(0xFF0369A1),
         capacity: 1,
         etaText: '2 min',
         featureText: 'Drop 09:45 AM',
-        price: 85,
-        originalPrice: 95,
+        price: bikeP,
+        originalPrice: bikeP > 30 ? bikeP + 15 : null,
         icon: Icons.two_wheeler_rounded,
-        iconBg: Color(0xFFEFF6FF),
-        iconColor: Color(0xFF1E3A8A),
+        iconBg: const Color(0xFFEFF6FF),
+        iconColor: const Color(0xFF1E3A8A),
       ),
-      const RideOptionItem(
+      RideOptionItem(
         id: 'auto',
         name: 'Saffar Auto',
         badge: 'POPULAR',
-        badgeBg: Color(0xFFFFEDD5),
-        badgeTextColor: Color(0xFFC2410C),
+        badgeBg: const Color(0xFFFFEDD5),
+        badgeTextColor: const Color(0xFFC2410C),
         capacity: 3,
         etaText: '3 min',
         featureText: 'Eco-friendly',
-        price: 135,
+        price: autoP,
         bottomTag: 'Eco Save',
-        bottomTagColor: Color(0xFF10B981),
+        bottomTagColor: const Color(0xFF10B981),
         icon: Icons.electric_rickshaw_rounded,
-        iconBg: Color(0xFFFFEFE7),
-        iconColor: Color(0xFFFF6B00),
+        iconBg: const Color(0xFFFFEFE7),
+        iconColor: const Color(0xFFFF6B00),
       ),
-      const RideOptionItem(
+      RideOptionItem(
         id: 'mini',
         name: 'Mini Cab',
         capacity: 4,
         etaText: '4 min',
         featureText: 'AC Compact',
-        price: 210,
+        price: carP,
         bottomTag: 'Standard',
-        bottomTagColor: Color(0xFF64748B),
+        bottomTagColor: const Color(0xFF64748B),
         icon: Icons.directions_car_filled_rounded,
-        iconBg: Color(0xFFF1F5F9),
-        iconColor: Color(0xFF173B67),
+        iconBg: const Color(0xFFF1F5F9),
+        iconColor: const Color(0xFF173B67),
       ),
-      const RideOptionItem(
+      RideOptionItem(
         id: 'sedan',
         name: 'Prime Sedan',
         capacity: 4,
         etaText: '6 min',
         featureText: 'AC Premium',
-        price: 280,
+        price: sedanP,
         icon: Icons.local_taxi_rounded,
-        iconBg: Color(0xFFF1F5F9),
-        iconColor: Color(0xFF173B67),
+        iconBg: const Color(0xFFF1F5F9),
+        iconColor: const Color(0xFF173B67),
       ),
     ];
+  }
+
+  Future<void> _acquireCurrentPickupGps() async {
+    try {
+      final loc = await sl<LocationRepo>().getCurrentLatLng();
+      if (loc != null && mounted) {
+        setState(() {
+          _pickupLocation = loc;
+        });
+        _loadRoute();
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadRoute() async {
@@ -180,6 +289,18 @@ class _RideConfirmationScreenState extends State<RideConfirmationScreen> {
             padding: const EdgeInsets.all(70),
           );
         });
+      }
+
+      // Compute exact road distance and duration for accurate pricing
+      final distMeters = await sl<MapRouteRepo>().getDistanceInMetersFromSourceToDestination(
+        _pickupLocation,
+        _destinationLocation,
+      );
+      if (mounted && distMeters > 0) {
+        setState(() {
+          _calculatedRouteKm = distMeters / 1000.0;
+        });
+        _fetchLiveFares();
       }
     } catch (_) {}
   }
@@ -403,7 +524,7 @@ class _RideConfirmationScreenState extends State<RideConfirmationScreen> {
                                 color: Color(0xFF10B981), size: 14),
                             const SizedBox(width: 6),
                             Text(
-                              '${widget.distanceText} • ${widget.durationText}',
+                              '$_displayDistanceText • $_displayDurationText',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,

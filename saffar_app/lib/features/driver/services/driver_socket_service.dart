@@ -13,6 +13,8 @@ class DriverSocketService {
   final ValueNotifier<RideRequest?> incomingRequestNotifier = ValueNotifier<RideRequest?>(null);
   final ValueNotifier<bool> isConnectedNotifier = ValueNotifier<bool>(false);
   final ValueNotifier<String?> alertNotificationNotifier = ValueNotifier<String?>(null);
+  final ValueNotifier<Map<String, dynamic>?> driverStatusNotifier = ValueNotifier<Map<String, dynamic>?>(null);
+  final ValueNotifier<Map<String, dynamic>?> fareUpdatedNotifier = ValueNotifier<Map<String, dynamic>?>(null);
 
   bool get isConnected => _socket?.connected ?? false;
   RideRequest? get currentIncomingRequest => incomingRequestNotifier.value;
@@ -115,6 +117,26 @@ class DriverSocketService {
           alertNotificationNotifier.value = 'Rider cancelled the request';
         }
       });
+
+      // Handle real-time Super Admin approval / status updates
+      _socket?.on('driver_status_updated', (data) {
+        debugPrint('[Socket] Received driver_status_updated: $data');
+        if (data is Map) {
+          final map = Map<String, dynamic>.from(data);
+          final targetId = map['driver_id']?.toString();
+          if (targetId == null || targetId == _currentDriverId) {
+            driverStatusNotifier.value = map;
+          }
+        }
+      });
+
+      // Handle real-time Super Admin fare pricing updates
+      _socket?.on('fare_config_updated', (data) {
+        debugPrint('[DriverSocket] Received fare_config_updated: $data');
+        if (data is Map) {
+          fareUpdatedNotifier.value = Map<String, dynamic>.from(data);
+        }
+      });
     } catch (e) {
       debugPrint('[Socket] Init error: $e');
     }
@@ -147,6 +169,50 @@ class DriverSocketService {
       });
     }
     incomingRequestNotifier.value = null;
+  }
+
+  /// Send live driver GPS location update to backend over WebSocket
+  void updateLocation({
+    required double latitude,
+    required double longitude,
+    double? heading,
+    double? speed,
+    double? accuracy,
+    String? rideId,
+  }) {
+    if (_socket != null && _socket!.connected && _currentDriverId != null) {
+      _socket?.emit('driver:location:update', {
+        'driverId': _currentDriverId,
+        'latitude': latitude,
+        'longitude': longitude,
+        'heading': heading ?? 0.0,
+        'speed': speed ?? 0.0,
+        'accuracy': accuracy ?? 0.0,
+        if (rideId != null) 'rideId': rideId,
+      });
+    }
+  }
+
+  /// Emit online status change via WebSocket
+  void setOnline({double? latitude, double? longitude, double? heading, double? speed}) {
+    if (_socket != null && _socket!.connected && _currentDriverId != null) {
+      _socket?.emit('driver:set_online', {
+        'driverId': _currentDriverId,
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
+        if (heading != null) 'heading': heading,
+        if (speed != null) 'speed': speed,
+      });
+    }
+  }
+
+  /// Emit offline status change via WebSocket
+  void setOffline() {
+    if (_socket != null && _socket!.connected && _currentDriverId != null) {
+      _socket?.emit('driver:set_offline', {
+        'driverId': _currentDriverId,
+      });
+    }
   }
 
   void disconnect() {

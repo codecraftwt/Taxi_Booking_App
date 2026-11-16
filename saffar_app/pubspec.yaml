@@ -59,7 +59,8 @@ flutter_icons:
   ios: true
 
 flutter_native_splash:
-  color: '#FF6F00'
+  color: '#FFFFFF'
+  color_dark: '#0F172A'
   image: 'assets/images/saffar_logo.png'
   android: true
   ios: true
@@ -78,7 +79,6 @@ flutter:
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
   assets:
-    - assets/fonts/Nunito/
     - assets/images/
     - .env
     - dev.env

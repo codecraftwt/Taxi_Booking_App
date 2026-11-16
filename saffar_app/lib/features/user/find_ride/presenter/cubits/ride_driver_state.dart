@@ -17,10 +17,12 @@ class RideDriverGot extends RideDriverState {
   const RideDriverGot({
     required this.driver,
     required this.points,
+    this.otp,
   });
 
   final Driver driver;
   final List<LatLng> points;
+  final String? otp;
 }
 
 /// State when fetching the info hence loading

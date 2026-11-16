@@ -94,7 +94,10 @@ class RideRepo {
     double? discountPrice,
   }) async {
     try {
-      final uid = effectiveUserId ?? 'user_001';
+      final uid = effectiveUserId;
+      if (uid == null || uid.isEmpty) {
+        throw CustomException(message: 'User authentication required. Please log in.');
+      }
       final Response response = await _dio.post(
         '${Strings.baseApiUrl}/ride/add_ride',
         data: {
@@ -164,7 +167,10 @@ class RideRepo {
   /// Rebooks a previous ride by cloning pickup, drop and vehicle details
   Future<Map<String, dynamic>> rebookRide(String rideId) async {
     try {
-      final uid = effectiveUserId ?? 'user_001';
+      final uid = effectiveUserId;
+      if (uid == null || uid.isEmpty) {
+        throw CustomException(message: 'User authentication required. Please log in.');
+      }
       final Response response = await _dio.post(
         '${Strings.baseApiUrl}/ride/rebook',
         data: {
@@ -366,11 +372,20 @@ class RideRepo {
   }
 
   /// Searches places & landmarks matching a query from backend
-  Future<List<Map<String, dynamic>>> searchPlaces(String queryText) async {
+  Future<List<Map<String, dynamic>>> searchPlaces(
+    String queryText, {
+    double? latitude,
+    double? longitude,
+  }) async {
     try {
+      final queryParams = <String, dynamic>{'query': queryText};
+      if (latitude != null && longitude != null) {
+        queryParams['latitude'] = latitude;
+        queryParams['longitude'] = longitude;
+      }
       final Response response = await _dio.get(
         '${Strings.baseApiUrl}/ride/search_places',
-        queryParameters: {'query': queryText},
+        queryParameters: queryParams,
         options: Options(headers: _authHeaders()),
       );
 

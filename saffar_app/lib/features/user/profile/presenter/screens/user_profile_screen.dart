@@ -370,21 +370,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       child: Row(
         children: [
           // Saffar Brand Logo
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFFFF6B00), Color(0xFFFF8A00)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+          Image.asset(
+            'assets/images/saffar_logo_rounded.png',
+            width: 34,
+            height: 34,
+            errorBuilder: (_, __, ___) => Container(
+              width: 34,
+              height: 34,
+              decoration: const BoxDecoration(
+                color: Palette.primary,
+                shape: BoxShape.circle,
               ),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(
-              Icons.electric_rickshaw_rounded,
-              color: Colors.white,
-              size: 18,
+              child: const Icon(Icons.navigation, color: Colors.white, size: 18),
             ),
           ),
           const SizedBox(width: 8),
@@ -1912,7 +1909,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
               decoration: InputDecoration(
                 prefixIcon:
                     const Icon(Icons.person_outline, color: Palette.primary),
-                hintText: 'e.g. Sameer Verma',
+                hintText: 'Enter your full name',
                 border:
                     OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 contentPadding:
@@ -1936,7 +1933,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
               decoration: InputDecoration(
                 prefixIcon:
                     const Icon(Icons.email_outlined, color: Palette.primary),
-                hintText: 'e.g. sameer.v@example.com',
+                hintText: 'name@example.com',
                 border:
                     OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 contentPadding:

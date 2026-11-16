@@ -83,6 +83,16 @@ class DriverRepo {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getVehicleFares() async {
+    try {
+      final response = await _dio.get('${Strings.baseApiUrl}/auth/fares');
+      if (response.data != null && response.data['fares'] != null) {
+        return List<Map<String, dynamic>>.from(response.data['fares']);
+      }
+    } catch (_) {}
+    return [];
+  }
+
   Future<Map<String, dynamic>> driverSignUp({
     required String name,
     required String phone,
@@ -90,7 +100,18 @@ class DriverRepo {
     required String vehicleName,
     required String vehicleNumber,
     String? vehicleModel,
+    String? vehicleCategory,
     String? email,
+    String? dlNumber,
+    String? dlExpiry,
+    String? dlDoc,
+    String? rcNumber,
+    String? rcDoc,
+    String? insuranceNumber,
+    String? insuranceExpiry,
+    String? insuranceDoc,
+    String? aadhaarNumber,
+    String? aadhaarDoc,
   }) async {
     try {
       final payload = <String, dynamic>{
@@ -103,8 +124,41 @@ class DriverRepo {
       if (vehicleModel != null && vehicleModel.isNotEmpty) {
         payload['vehicle_model'] = vehicleModel;
       }
+      if (vehicleCategory != null && vehicleCategory.isNotEmpty) {
+        payload['vehicle_category'] = vehicleCategory;
+      }
       if (email != null && email.isNotEmpty) {
         payload['email'] = email;
+      }
+      if (dlNumber != null && dlNumber.isNotEmpty) {
+        payload['driving_license_number'] = dlNumber;
+      }
+      if (dlExpiry != null && dlExpiry.isNotEmpty) {
+        payload['driving_license_expiry'] = dlExpiry;
+      }
+      if (dlDoc != null && dlDoc.isNotEmpty) {
+        payload['driving_license_doc'] = dlDoc;
+      }
+      if (rcNumber != null && rcNumber.isNotEmpty) {
+        payload['rc_number'] = rcNumber;
+      }
+      if (rcDoc != null && rcDoc.isNotEmpty) {
+        payload['rc_doc'] = rcDoc;
+      }
+      if (insuranceNumber != null && insuranceNumber.isNotEmpty) {
+        payload['insurance_policy_number'] = insuranceNumber;
+      }
+      if (insuranceExpiry != null && insuranceExpiry.isNotEmpty) {
+        payload['insurance_expiry'] = insuranceExpiry;
+      }
+      if (insuranceDoc != null && insuranceDoc.isNotEmpty) {
+        payload['insurance_doc'] = insuranceDoc;
+      }
+      if (aadhaarNumber != null && aadhaarNumber.isNotEmpty) {
+        payload['aadhaar_number'] = aadhaarNumber;
+      }
+      if (aadhaarDoc != null && aadhaarDoc.isNotEmpty) {
+        payload['aadhaar_doc'] = aadhaarDoc;
       }
 
       final Response response = await _dio.post(
@@ -122,7 +176,8 @@ class DriverRepo {
                   phone: phone,
                   vehicleName: vehicleName,
                   vehicleNumber: vehicleNumber,
-                  active: true,
+                  active: false,
+                  verificationStatus: 'pending',
                 ),
           'token': data['token'],
         };

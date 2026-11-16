@@ -84,7 +84,12 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   void _onSwitchToDriverMode(BuildContext context) {
-    Navigator.pushNamed(context, DriverSignInScreen.routeName);
+    final driverState = context.read<DriverCubit>().state;
+    if (driverState.isLoggedIn) {
+      Navigator.pushReplacementNamed(context, DriverShellScreen.routeName);
+    } else {
+      Navigator.pushNamed(context, DriverSignInScreen.routeName);
+    }
   }
 
   @override
@@ -253,50 +258,44 @@ class _SplashScreenState extends State<SplashScreen> {
         Stack(
           clipBehavior: Clip.none,
           children: [
-            // Saffar Orange Squircle
+            // Saffar Official Brand Logo
             Container(
-              width: 76,
-              height: 76,
+              width: 88,
+              height: 88,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFFF6B00), Color(0xFFFF8500)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(22),
+                color: Colors.white,
+                shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFFFF6B00).withValues(alpha: 0.35),
-                    blurRadius: 18,
-                    offset: const Offset(0, 6),
+                    color: const Color(0xFF0284C7).withValues(alpha: 0.25),
+                    blurRadius: 22,
+                    offset: const Offset(0, 8),
                   ),
                 ],
               ),
-              child: const Center(
-                child: Icon(
-                  Icons.north_east_rounded,
-                  color: Colors.white,
-                  size: 38,
-                ),
+              padding: const EdgeInsets.all(8),
+              child: Image.asset(
+                'assets/images/saffar_logo_rounded.png',
+                fit: BoxFit.contain,
               ),
             ),
 
-            // Thunderbolt Circular Badge
+            // Verified Badge
             Positioned(
-              bottom: -2,
-              right: -2,
+              bottom: 0,
+              right: 0,
               child: Container(
                 width: 26,
                 height: 26,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A),
+                  color: const Color(0xFF0284C7),
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 2),
                 ),
                 child: const Center(
                   child: Icon(
                     Icons.bolt_rounded,
-                    color: Color(0xFF38BDF8),
+                    color: Colors.white,
                     size: 15,
                   ),
                 ),

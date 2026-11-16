@@ -25,6 +25,16 @@ class _DriverSignInScreenState extends State<DriverSignInScreen> {
   bool _passwordVisible = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.read<DriverCubit>().state.isLoggedIn && mounted) {
+        Navigator.pushReplacementNamed(context, DriverShellScreen.routeName);
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _phoneController.dispose();
     _passwordController.dispose();

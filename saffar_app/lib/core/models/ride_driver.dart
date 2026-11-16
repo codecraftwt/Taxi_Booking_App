@@ -11,6 +11,7 @@ class RideDriver {
     required this.sourcePosition,
     required this.destinationPosition,
     this.points = const [],
+    this.otp,
   });
 
   final Driver driver;
@@ -18,6 +19,7 @@ class RideDriver {
   final LatLng destinationPosition;
   /// Points in route from source position to destination position
   final List<LatLng> points;
+  final String? otp;
 
   /// Parses map to RideDriver model
   factory RideDriver.fromMap(Map<String, dynamic> map) {
@@ -58,6 +60,7 @@ class RideDriver {
       driver: Driver.fromMap(map['driver']),
       sourcePosition: LatLng(sourceLat, sourceLon),
       destinationPosition: LatLng(destinationLat, destinationLon),
+      otp: map['otp']?.toString(),
     );
   }
 
@@ -68,6 +71,7 @@ class RideDriver {
       sourcePosition: sourcePosition,
       destinationPosition: destinationPosition,
       points: points,
+      otp: otp,
     );
   }
 }

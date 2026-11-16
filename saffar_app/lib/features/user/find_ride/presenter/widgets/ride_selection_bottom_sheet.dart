@@ -1,5 +1,9 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:saffar_app/core/palette.dart';
+import 'package:saffar_app/core/service_locator.dart';
+import 'package:saffar_app/features/driver/data/repositories/driver_repo.dart';
+import 'package:saffar_app/features/user/ride/services/customer_socket_service.dart';
 
 class RideOption {
   const RideOption({
@@ -60,54 +64,112 @@ class _RideSelectionBottomSheetState extends State<RideSelectionBottomSheet> {
   String _selectedPaymentMethod = 'Cash';
   String _appliedCoupon = 'SAVE30 applied';
 
-  late final List<RideOption> _options;
+  List<RideOption> _options = [];
 
   @override
   void initState() {
     super.initState();
+    _buildOptionsFromFares(null);
+    _fetchLiveFares();
+    CustomerSocketService.instance.fareUpdatedNotifier.addListener(_onFareConfigUpdated);
+  }
+
+  @override
+  void dispose() {
+    CustomerSocketService.instance.fareUpdatedNotifier.removeListener(_onFareConfigUpdated);
+    super.dispose();
+  }
+
+  void _onFareConfigUpdated() {
+    _fetchLiveFares();
+  }
+
+  Future<void> _fetchLiveFares() async {
+    try {
+      final fares = await sl<DriverRepo>().getVehicleFares();
+      if (fares.isNotEmpty && mounted) {
+        setState(() {
+          _buildOptionsFromFares(fares);
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _buildOptionsFromFares(List<Map<String, dynamic>>? fares) {
+    Map<String, dynamic>? findFare(String cat) {
+      if (fares == null) return null;
+      try {
+        return fares.firstWhere(
+          (f) => f['category']?.toString().toLowerCase() == cat.toLowerCase(),
+          orElse: () => {},
+        );
+      } catch (_) {
+        return null;
+      }
+    }
+
+    double calcPrice(Map<String, dynamic>? f, double defaultBase, double defaultPerKm, double defaultMin) {
+      final base = (f?['base_fare'] as num?)?.toDouble() ?? defaultBase;
+      final perKm = (f?['per_km'] as num?)?.toDouble() ?? defaultPerKm;
+      final perMin = (f?['per_minute'] as num?)?.toDouble() ?? 1.5;
+      final minFare = (f?['minimum_fare'] as num?)?.toDouble() ?? defaultMin;
+      final total = base + (widget.distanceKm * perKm) + (widget.durationMins * perMin);
+      return math.max(minFare, total).roundToDouble();
+    }
+
+    final bikeFare = findFare('Bike');
+    final autoFare = findFare('Auto');
+    final carFare = findFare('Car');
+    final sedanFare = findFare('Prime Sedan') ?? findFare('Sedan');
+
+    final bikeP = calcPrice(bikeFare, 20.0, 8.0, 30.0);
+    final autoP = calcPrice(autoFare, 30.0, 12.0, 40.0);
+    final carP = calcPrice(carFare, 50.0, 15.0, 70.0);
+    final sedanP = calcPrice(sedanFare, 70.0, 18.0, 90.0);
+
     _options = [
-      const RideOption(
+      RideOption(
         id: 'bike',
         name: 'Saffar Bike',
         badge: 'FASTEST',
-        badgeColor: Color(0xFFE0F2FE),
+        badgeColor: const Color(0xFFE0F2FE),
         capacity: 1,
         etaMins: 2,
-        description: '1 • Drop 09:45 AM • 2 min',
-        price: 85,
-        originalPrice: 95,
+        description: '1 • Quick & agile • 2 min',
+        price: bikeP,
+        originalPrice: bikeP > 30 ? bikeP + 15 : null,
         icon: Icons.two_wheeler_rounded,
       ),
-      const RideOption(
+      RideOption(
         id: 'auto',
         name: 'Saffar Auto',
         badge: 'POPULAR',
-        badgeColor: Color(0xFFFFEDD5),
+        badgeColor: const Color(0xFFFFEDD5),
         subBadge: 'Eco Save',
-        subBadgeColor: Color(0xFFE2F7ED),
+        subBadgeColor: const Color(0xFFE2F7ED),
         capacity: 3,
         etaMins: 3,
         description: '3 • Eco-friendly • 3 min',
-        price: 135,
+        price: autoP,
         icon: Icons.electric_rickshaw_rounded,
       ),
-      const RideOption(
+      RideOption(
         id: 'mini',
         name: 'Mini Cab',
         subBadge: 'Standard',
         capacity: 4,
         etaMins: 4,
         description: '4 • AC Compact • 4 min',
-        price: 210,
+        price: carP,
         icon: Icons.directions_car_filled_rounded,
       ),
-      const RideOption(
+      RideOption(
         id: 'sedan',
         name: 'Prime Sedan',
         capacity: 4,
         etaMins: 6,
         description: '4 • Spacious Sedan • 6 min',
-        price: 280,
+        price: sedanP,
         icon: Icons.local_taxi_rounded,
       ),
     ];

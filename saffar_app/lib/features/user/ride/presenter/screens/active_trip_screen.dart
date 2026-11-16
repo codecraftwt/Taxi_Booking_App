@@ -9,6 +9,7 @@ import 'package:saffar_app/core/service_locator.dart';
 import 'package:saffar_app/core/services/map_service.dart';
 import 'package:saffar_app/core/widgets/map_marker_widgets.dart';
 import 'package:saffar_app/features/ride/data/repositories/ride_repo.dart';
+import 'package:saffar_app/features/location/data/repositories/location_repo.dart';
 import 'package:saffar_app/features/user/presenter/cubits/user_cubit.dart';
 import 'package:saffar_app/features/user/presenter/screens/user_support_screen.dart';
 import 'package:saffar_app/features/ride/presenter/screens/rate_review_driver_screen.dart';
@@ -58,15 +59,10 @@ class ActiveTripScreen extends StatefulWidget {
 class _ActiveTripScreenState extends State<ActiveTripScreen> {
   late final MapController _mapController;
 
-  // Bengaluru coordinates matching the Stitch map mockup
-  final LatLng _userLocation = const LatLng(12.9350, 77.6850); // Bellandur / Gate 2
-  final LatLng _driverStartLocation = const LatLng(12.9780, 77.6350); // Indiranagar
-
-  late LatLng _currentDriverLocation;
-  Timer? _animationTimer;
+  LatLng _userLocation = MapConfig.defaultCenter;
+  LatLng _currentDriverLocation = MapConfig.defaultCenter;
   Timer? _statusPollTimer;
   bool _isCancellationDialogShowing = false;
-  double _animationProgress = 0.0;
   late String _currentOtp;
 
   @override
@@ -74,7 +70,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     super.initState();
     _currentOtp = widget.otp;
     _mapController = MapController();
-    _currentDriverLocation = _driverStartLocation;
+    _acquireUserGps();
     _fetchLiveOtp();
     _checkRideStatus();
 
@@ -83,7 +79,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       final userRepo = sl<UserRepo>();
       final token = userRepo.getTokenFromLocalStorage();
       final userMap = userRepo.getUserMapFromLocalStorage();
-      final userId = userMap?['id']?.toString() ?? 'user_001';
+      final userId = userMap?['id']?.toString() ?? userMap?['userId']?.toString() ?? '';
       CustomerSocketService.instance.connect(userId, token);
       CustomerSocketService.instance.joinRide(widget.rideId);
 
@@ -98,24 +94,6 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     _statusPollTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       _checkRideStatus();
     });
-
-    // Smoothly animate driver vehicle along the route
-    _animationTimer = Timer.periodic(const Duration(milliseconds: 300), (timer) {
-      if (!mounted) return;
-      setState(() {
-        _animationProgress += 0.015;
-        if (_animationProgress > 1.0) _animationProgress = 0.0;
-
-        _currentDriverLocation = LatLng(
-          _driverStartLocation.latitude +
-              (_userLocation.latitude - _driverStartLocation.latitude) *
-                  _animationProgress,
-          _driverStartLocation.longitude +
-              (_userLocation.longitude - _driverStartLocation.longitude) *
-                  _animationProgress,
-        );
-      });
-    });
   }
 
   @override
@@ -123,7 +101,6 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     CustomerSocketService.instance.driverLocationNotifier.removeListener(_onLiveDriverLocation);
     CustomerSocketService.instance.tripCompletedNotifier.removeListener(_onLiveTripCompleted);
     CustomerSocketService.instance.cancellationNotifier.removeListener(_onLiveCancellation);
-    _animationTimer?.cancel();
     _statusPollTimer?.cancel();
     super.dispose();
   }
@@ -131,7 +108,6 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   void _onLiveDriverLocation() {
     final loc = CustomerSocketService.instance.driverLocationNotifier.value;
     if (loc != null && mounted) {
-      _animationTimer?.cancel(); // Cancel dummy linear interpolation when real GPS arrives
       setState(() {
         _currentDriverLocation = loc;
       });
@@ -141,7 +117,6 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   void _onLiveTripCompleted() {
     final data = CustomerSocketService.instance.tripCompletedNotifier.value;
     if (data != null && mounted) {
-      _animationTimer?.cancel();
       _statusPollTimer?.cancel();
       final finalFare = data['final_fare'] != null ? '₹${data['final_fare']}' : widget.fare;
       Navigator.pushReplacementNamed(
@@ -169,7 +144,6 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   void _showCancellationDialog(String cancelledBy, String reason) {
     if (_isCancellationDialogShowing) return;
     _isCancellationDialogShowing = true;
-    _animationTimer?.cancel();
     _statusPollTimer?.cancel();
 
     showDialog(
@@ -230,6 +204,18 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _acquireUserGps() async {
+    try {
+      final loc = await sl<LocationRepo>().getCurrentLatLng();
+      if (loc != null && mounted) {
+        setState(() {
+          _userLocation = loc;
+        });
+        _mapController.move(loc, MapConfig.activeTripZoom);
+      }
+    } catch (_) {}
   }
 
   void _checkRideStatus() async {
@@ -486,8 +472,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                         polylines: [
                           Polyline(
                             points: [
-                              _driverStartLocation,
-                              const LatLng(12.9565, 77.6600),
+                              _currentDriverLocation,
                               _userLocation,
                             ],
                             color: MapConfig.routeColor,

@@ -24,6 +24,8 @@ class DriverCubit extends Cubit<DriverState> {
         if (driver.isOnline) {
           DriverLocationService.instance.startLocationTracking(token: token);
         }
+        // Asynchronously check and sync latest status from server (e.g. if approved by admin while app was closed)
+        refreshProfile();
       }
     } catch (_) {
       // No stored session
@@ -47,7 +49,7 @@ class DriverCubit extends Cubit<DriverState> {
     }
   }
 
-  /// Sign up and persist session
+  /// Sign up and persist session (with vehicle category and compliance documents)
   Future<void> signUp({
     required String name,
     required String phone,
@@ -55,7 +57,18 @@ class DriverCubit extends Cubit<DriverState> {
     required String vehicleName,
     required String vehicleNumber,
     String? vehicleModel,
+    String? vehicleCategory,
     String? email,
+    String? dlNumber,
+    String? dlExpiry,
+    String? dlDoc,
+    String? rcNumber,
+    String? rcDoc,
+    String? insuranceNumber,
+    String? insuranceExpiry,
+    String? insuranceDoc,
+    String? aadhaarNumber,
+    String? aadhaarDoc,
   }) async {
     emit(state.copyWith(isLoading: true, error: null));
     try {
@@ -66,7 +79,18 @@ class DriverCubit extends Cubit<DriverState> {
         vehicleName: vehicleName,
         vehicleNumber: vehicleNumber,
         vehicleModel: vehicleModel,
+        vehicleCategory: vehicleCategory,
         email: email,
+        dlNumber: dlNumber,
+        dlExpiry: dlExpiry,
+        dlDoc: dlDoc,
+        rcNumber: rcNumber,
+        rcDoc: rcDoc,
+        insuranceNumber: insuranceNumber,
+        insuranceExpiry: insuranceExpiry,
+        insuranceDoc: insuranceDoc,
+        aadhaarNumber: aadhaarNumber,
+        aadhaarDoc: aadhaarDoc,
       );
       final driver = result['driver'] as Driver;
       final token = result['token'] as String;

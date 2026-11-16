@@ -12,6 +12,7 @@ import 'package:saffar_app/features/driver/presenter/cubits/driver_pickup_cubit.
 import 'package:saffar_app/features/driver/presenter/cubits/driver_pickup_state.dart';
 import 'package:saffar_app/features/driver/presenter/screens/driver_trip_completed_screen.dart';
 import 'package:saffar_app/features/driver/presenter/screens/driver_cancel_ride_screen.dart';
+import 'package:saffar_app/features/driver/services/driver_location_service.dart';
 
 class DriverActiveTripScreen extends StatefulWidget {
   const DriverActiveTripScreen({
@@ -36,6 +37,7 @@ class _DriverActiveTripScreenState extends State<DriverActiveTripScreen> {
   @override
   void initState() {
     super.initState();
+    DriverLocationService.instance.getCurrentLocation();
     _startDurationTimer();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadRideData();
@@ -190,11 +192,15 @@ class _DriverActiveTripScreenState extends State<DriverActiveTripScreen> {
         final destination = ride?['destination'] as Map<String, dynamic>?;
         final passenger = ride?['passenger'] as Map<String, dynamic>?;
 
-        final destLat = (destination?['lat'] as num?)?.toDouble() ?? 12.9352;
-        final destLon = (destination?['lon'] as num?)?.toDouble() ?? 77.6245;
+        final destLat = (destination?['lat'] as num?)?.toDouble() ?? MapConfig.defaultCenter.latitude;
+        final destLon = (destination?['lon'] as num?)?.toDouble() ?? MapConfig.defaultCenter.longitude;
         final destLatLng = LatLng(destLat, destLon);
 
-        final driverPos = state.driverLocation ?? LatLng(destLat - 0.015, destLon - 0.015);
+        final curLoc = DriverLocationService.instance.currentLocation;
+        final driverPos = state.driverLocation ??
+            (curLoc != null && curLoc.latitude != null
+                ? LatLng(curLoc.latitude!, curLoc.longitude!)
+                : destLatLng);
 
         // Calculate live distance to destination
         final metersToDest = _distanceCalc.as(LengthUnit.Meter, driverPos, destLatLng);

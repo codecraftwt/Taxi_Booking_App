@@ -8,6 +8,7 @@ import 'package:saffar_app/core/widgets/map_marker_widgets.dart';
 import 'package:saffar_app/core/cubits/previous_rides_cubit.dart';
 import 'package:saffar_app/core/palette.dart';
 import 'package:saffar_app/core/service_locator.dart';
+import 'package:saffar_app/features/location/data/repositories/location_repo.dart';
 import 'package:saffar_app/features/authentication/presenter/screens/role_selection_screen.dart';
 import 'package:saffar_app/features/driver/presenter/screens/driver_sign_in_screen.dart';
 import 'package:saffar_app/features/user/presenter/cubits/user_cubit.dart';
@@ -15,6 +16,7 @@ import 'package:saffar_app/features/home/presenter/cubits/home_cubit.dart';
 import 'package:saffar_app/features/home/presenter/widgets/choose_location_modal.dart';
 import 'package:saffar_app/features/ride/data/repositories/ride_repo.dart';
 import 'package:saffar_app/features/ride/presenter/screens/ride_confirmation_screen.dart';
+import 'package:saffar_app/features/user/ride/services/customer_socket_service.dart';
 import 'package:saffar_app/features/ride/presenter/screens/active_trip_screen.dart';
 import 'package:saffar_app/features/user/presenter/screens/user_profile_screen.dart';
 import 'package:saffar_app/features/user/presenter/screens/user_ride_history_screen.dart';
@@ -34,8 +36,9 @@ class _HomeScreenState extends State<HomeScreen> {
   late final HomeCubit _homeCubit;
   late final MapController _mapController;
 
-  // Center location default (Maharashtra / Kolhapur default, updated via live GPS)
+  // Current user GPS location
   LatLng _userLocation = const LatLng(16.7050, 74.2433);
+  bool _isGpsLoaded = false;
 
   int _selectedNavIndex = 0;
   Map<String, dynamic>? _nearbyData;
@@ -50,26 +53,57 @@ class _HomeScreenState extends State<HomeScreen> {
     _mapController = MapController();
     context.read<PreviousRidesCubit>().getListOfPreviousRidesAndEmit();
     context.read<UserCubit>().fetchAndRefreshUserProfile();
-    _fetchNearbyVehicles();
     _checkActiveRideAndRestore();
-    _loadCurrentAddress();
+    _acquireUserLiveLocation(forceRecenter: true);
+    CustomerSocketService.instance.fareUpdatedNotifier.addListener(_onSocketFareUpdated);
   }
 
-  Future<void> _loadCurrentAddress() async {
+  void _onSocketFareUpdated() {
+    if (mounted) _fetchNearbyVehicles();
+  }
+
+  @override
+  void dispose() {
+    CustomerSocketService.instance.fareUpdatedNotifier.removeListener(_onSocketFareUpdated);
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _acquireUserLiveLocation({bool forceRecenter = false}) async {
     try {
+      // 1. Immediately request/obtain GPS coordinates without waiting on network reverse geocoding
+      final LatLng? gpsPos = await sl<LocationRepo>().getCurrentLatLng();
+      if (gpsPos != null && mounted) {
+        setState(() {
+          _userLocation = gpsPos;
+          _isGpsLoaded = true;
+        });
+        _mapController.move(gpsPos, 15.0);
+        _fetchNearbyVehicles();
+      }
+
+      // 2. Resolve friendly street name in background
       final addr = await _homeCubit.getCurrentAddress();
       if (addr != null && mounted) {
         setState(() {
           _userLocation = addr.latLng;
+          _isGpsLoaded = true;
           final text = [addr.street, addr.place].where((s) => s != null && s.isNotEmpty).join(', ');
           if (text.isNotEmpty) {
             _currentPickupAddress = text;
           }
         });
-        _mapController.move(addr.latLng, 14.8);
-        _fetchNearbyVehicles();
+        if (forceRecenter) {
+          _mapController.move(addr.latLng, 15.0);
+        }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[HOME] Live location error: $e');
+    }
+  }
+
+  Future<void> _loadCurrentAddress() async {
+    await _acquireUserLiveLocation();
   }
 
   Future<void> _checkActiveRideAndRestore() async {
@@ -169,6 +203,8 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       initialPickup: _currentPickupAddress,
       initialDestination: initialDestination,
+      pickupLat: _userLocation.latitude,
+      pickupLon: _userLocation.longitude,
       focusDestination: focusDestination,
       onLocationSelected: (pickup, destination, distance, duration, {destLat, destLon}) {
         _openBookingScreen(
@@ -220,7 +256,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final user = context.watch<UserCubit>().state.currentUser;
     final String? userImageUrl = user?.imageUrl;
-    final String userName = user?.name.split(' ').first ?? 'Sameer';
+    final String userName = (user?.name != null && user!.name.trim().isNotEmpty)
+        ? user.name.trim().split(' ').first
+        : 'Rider';
 
     return BlocProvider<HomeCubit>.value(
       value: _homeCubit,
@@ -503,7 +541,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 // Target GPS button
                 GestureDetector(
                   onTap: () {
-                    _mapController.move(_userLocation, 14.8);
+                    _acquireUserLiveLocation(forceRecenter: true);
                   },
                   child: Container(
                     width: 38,
@@ -778,9 +816,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: Icons.home_outlined,
                   iconColor: const Color(0xFF173B67),
                   title: 'Home',
-                  subtitle: '12 Elm Street',
+                  subtitle: 'Set location',
                   onTap: () => _openLocationSearch(
-                    initialDestination: 'Home, 12 Elm Street',
                     focusDestination: true,
                   ),
                 ),
@@ -791,9 +828,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: Icons.business_center_outlined,
                   iconColor: const Color(0xFF173B67),
                   title: 'Office',
-                  subtitle: 'Tech Park BD',
+                  subtitle: 'Set location',
                   onTap: () => _openLocationSearch(
-                    initialDestination: 'Office, Tech Park BD',
                     focusDestination: true,
                   ),
                 ),
@@ -804,7 +840,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: Icons.star_rounded,
                   iconColor: const Color(0xFFFF6B00),
                   title: 'Recent',
-                  subtitle: 'Skyline...',
+                  subtitle: 'Recent places',
                   onTap: () => _openLocationSearch(
                     focusDestination: true,
                   ),

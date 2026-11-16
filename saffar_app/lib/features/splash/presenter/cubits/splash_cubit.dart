@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:saffar_app/features/user/presenter/cubits/user_cubit.dart';
+import 'package:saffar_app/features/driver/presenter/cubits/driver_cubit.dart';
 import 'package:saffar_app/features/splash/domain/init_splash_usecase.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -21,6 +22,9 @@ class SplashCubit extends Cubit<SplashState> {
       context
           .read<UserCubit>()
           .getCurrentUserFromLocalStorageAndEmitCurrentUser();
+      await context
+          .read<DriverCubit>()
+          .tryRestoreSession();
     }
 
     emit(const SplashDone());

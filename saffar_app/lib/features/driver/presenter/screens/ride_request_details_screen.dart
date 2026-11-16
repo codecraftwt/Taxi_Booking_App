@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:saffar_app/core/config/map_config.dart';
 import 'package:saffar_app/core/models/ride_request.dart';
 import 'package:saffar_app/core/palette.dart';
 import 'package:saffar_app/features/driver/presenter/cubits/driver_cubit.dart';
@@ -106,8 +107,14 @@ class _RideRequestDetailsScreenState extends State<RideRequestDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final req = widget.request;
-    final pickupPoint = LatLng(req.pickupLat ?? 12.9350, req.pickupLon ?? 77.6850);
-    final dropPoint = LatLng(req.destinationLat ?? 12.9780, req.destinationLon ?? 77.6350);
+    final pickupPoint = LatLng(
+      req.pickupLat ?? MapConfig.defaultCenter.latitude,
+      req.pickupLon ?? MapConfig.defaultCenter.longitude,
+    );
+    final dropPoint = LatLng(
+      req.destinationLat ?? MapConfig.defaultCenter.latitude,
+      req.destinationLon ?? MapConfig.defaultCenter.longitude,
+    );
 
     return Scaffold(
       backgroundColor: Colors.white,

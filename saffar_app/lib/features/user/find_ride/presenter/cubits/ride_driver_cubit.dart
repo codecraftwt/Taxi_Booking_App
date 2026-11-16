@@ -35,6 +35,7 @@ class RideDriverCubit extends Cubit<RideDriverState> {
         emit(RideDriverGot(
           driver: r.driver,
           points: r.points,
+          otp: r.otp,
         ));
       },
     );
@@ -53,6 +54,7 @@ class RideDriverCubit extends Cubit<RideDriverState> {
       emit(RideDriverGot(
         driver: rideDriverGotState.driver,
         points: movedPoints,
+        otp: rideDriverGotState.otp,
       ));
     }
   }
@@ -61,11 +63,19 @@ class RideDriverCubit extends Cubit<RideDriverState> {
     emit(const RideDriverInitial());
   }
 
-  void openCallerApp(String phoneNumber) {
-    _openCallerAppUsecase.call(phoneNumber);
+  void openCallerApp([String? phoneNumber]) {
+    final phone = (phoneNumber != null && phoneNumber.isNotEmpty)
+        ? phoneNumber
+        : (state is RideDriverGot ? (state as RideDriverGot).driver.phone : '');
+    if (phone.isNotEmpty) {
+      _openCallerAppUsecase.call(phone);
+    }
   }
 
-  void shareDriverInfo(Driver driver) {
-    _shareDriverInfoUsecase.call(driver);
+  void shareDriverInfo([Driver? customDriver]) {
+    final driver = customDriver ?? (state is RideDriverGot ? (state as RideDriverGot).driver : null);
+    if (driver != null) {
+      _shareDriverInfoUsecase.call(driver);
+    }
   }
 }

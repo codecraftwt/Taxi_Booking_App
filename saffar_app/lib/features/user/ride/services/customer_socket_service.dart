@@ -21,6 +21,7 @@ class CustomerSocketService {
   final ValueNotifier<Map<String, dynamic>?> driverDetailsNotifier = ValueNotifier<Map<String, dynamic>?>(null);
   final ValueNotifier<Map<String, dynamic>?> searchProgressNotifier = ValueNotifier<Map<String, dynamic>?>(null);
   final ValueNotifier<String?> noDriversNotifier = ValueNotifier<String?>(null);
+  final ValueNotifier<Map<String, dynamic>?> fareUpdatedNotifier = ValueNotifier<Map<String, dynamic>?>(null);
 
   bool get isConnected => _socket?.connected ?? false;
 
@@ -128,10 +129,10 @@ class CustomerSocketService {
       });
 
       // 5. Driver live GPS telemetry broadcast
-      _socket?.on('driver_location_update', (data) {
+      void handleDriverLocationUpdate(dynamic data) {
         if (data is Map) {
-          final lat = (data['latitude'] as num?)?.toDouble();
-          final lon = (data['longitude'] as num?)?.toDouble();
+          final lat = (data['latitude'] as num?)?.toDouble() ?? (data['lat'] as num?)?.toDouble();
+          final lon = (data['longitude'] as num?)?.toDouble() ?? (data['lng'] as num?)?.toDouble() ?? (data['lon'] as num?)?.toDouble();
           final heading = (data['heading'] as num?)?.toDouble() ?? 0.0;
 
           if (lat != null && lon != null) {
@@ -139,7 +140,9 @@ class CustomerSocketService {
             driverHeadingNotifier.value = heading;
           }
         }
-      });
+      }
+      _socket?.on('driver_location_update', handleDriverLocationUpdate);
+      _socket?.on('ride:driver:location', handleDriverLocationUpdate);
 
       // 6. Trip concluded at destination
       _socket?.on('trip_completed', (data) {
@@ -147,6 +150,14 @@ class CustomerSocketService {
         rideStatusNotifier.value = 'completed';
         if (data is Map) {
           tripCompletedNotifier.value = Map<String, dynamic>.from(data);
+        }
+      });
+
+      // 7. Dynamic fare pricing update broadcast from Super Admin
+      _socket?.on('fare_config_updated', (data) {
+        debugPrint('[CustomerSocket] Event: fare_config_updated: $data');
+        if (data is Map) {
+          fareUpdatedNotifier.value = Map<String, dynamic>.from(data);
         }
       });
 

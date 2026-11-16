@@ -48,16 +48,41 @@ class LocationRepo {
     return _location.requestService();
   }
 
-  /// Gets the users current location. If can not get lat lng then null is
-  /// returned
+  /// Gets the user's current GPS location.
+  /// Automatically checks and requests service enablement and runtime permissions.
   Future<LatLng?> getCurrentLatLng() async {
-    final LocationData locationData = await _location.getLocation();
+    try {
+      // 1. Ensure GPS service is turned on
+      bool serviceEnabled = await _location.serviceEnabled();
+      if (!serviceEnabled) {
+        serviceEnabled = await _location.requestService();
+        if (!serviceEnabled) return null;
+      }
 
-    if (locationData.latitude != null && locationData.longitude != null) {
-      return LatLng(
-        locationData.latitude!,
-        locationData.longitude!,
-      );
+      // 2. Ensure location permission is granted
+      PermissionStatus permissionStatus = await _location.hasPermission();
+      if (permissionStatus == PermissionStatus.denied) {
+        permissionStatus = await _location.requestPermission();
+        if (permissionStatus != PermissionStatus.granted &&
+            permissionStatus != PermissionStatus.grantedLimited) {
+          return null;
+        }
+      }
+      if (permissionStatus == PermissionStatus.deniedForever) {
+        return null;
+      }
+
+      // 3. Acquire current location fix
+      final LocationData locationData = await _location.getLocation();
+
+      if (locationData.latitude != null && locationData.longitude != null) {
+        return LatLng(
+          locationData.latitude!,
+          locationData.longitude!,
+        );
+      }
+    } catch (_) {
+      return null;
     }
     return null;
   }

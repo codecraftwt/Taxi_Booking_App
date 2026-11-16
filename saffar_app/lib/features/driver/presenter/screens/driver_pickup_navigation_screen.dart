@@ -12,6 +12,7 @@ import 'package:saffar_app/features/driver/presenter/cubits/driver_pickup_state.
 import 'package:saffar_app/features/driver/presenter/screens/ride_otp_verification_screen.dart';
 import 'package:saffar_app/features/driver/presenter/screens/driver_active_trip_screen.dart';
 import 'package:saffar_app/features/driver/presenter/screens/driver_cancel_ride_screen.dart';
+import 'package:saffar_app/features/driver/services/driver_location_service.dart';
 
 class DriverPickupNavigationScreen extends StatefulWidget {
   const DriverPickupNavigationScreen({
@@ -33,6 +34,7 @@ class _DriverPickupNavigationScreenState extends State<DriverPickupNavigationScr
   @override
   void initState() {
     super.initState();
+    DriverLocationService.instance.getCurrentLocation();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadRideData();
     });
@@ -146,11 +148,15 @@ class _DriverPickupNavigationScreenState extends State<DriverPickupNavigationScr
         final destination = ride?['destination'] as Map<String, dynamic>?;
         final passenger = ride?['passenger'] as Map<String, dynamic>?;
 
-        final pickupLat = (pickup?['lat'] as num?)?.toDouble() ?? 16.7050;
-        final pickupLon = (pickup?['lon'] as num?)?.toDouble() ?? 74.2433;
+        final pickupLat = (pickup?['lat'] as num?)?.toDouble() ?? MapConfig.defaultCenter.latitude;
+        final pickupLon = (pickup?['lon'] as num?)?.toDouble() ?? MapConfig.defaultCenter.longitude;
         final pickupLatLng = LatLng(pickupLat, pickupLon);
 
-        final driverPos = state.driverLocation ?? LatLng(pickupLat - 0.008, pickupLon - 0.008);
+        final curLoc = DriverLocationService.instance.currentLocation;
+        final driverPos = state.driverLocation ??
+            (curLoc != null && curLoc.latitude != null
+                ? LatLng(curLoc.latitude!, curLoc.longitude!)
+                : LatLng(pickupLat - 0.008, pickupLon - 0.008));
 
         // Auto center map on first load
         if (!_hasInitialCentered) {

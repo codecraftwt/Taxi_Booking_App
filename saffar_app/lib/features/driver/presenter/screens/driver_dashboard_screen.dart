@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -33,6 +34,7 @@ class DriverDashboardScreen extends StatefulWidget {
 class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
   bool _hasActiveTrip = false;
   late final MapController _dashMapController;
+  Timer? _statusPollingTimer;
 
   @override
   void initState() {
@@ -40,9 +42,38 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
     _dashMapController = MapController();
     _loadDashboard();
     _initSocketAndRequestListener();
+    _acquireInitialDriverLocation();
+    _setupStatusPolling();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkActiveTripAndRestore();
     });
+  }
+
+  void _setupStatusPolling() {
+    _statusPollingTimer?.cancel();
+    _statusPollingTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+      if (mounted) {
+        final driver = context.read<DriverCubit>().state.currentDriver;
+        if (driver != null && driver.verificationStatus.toLowerCase() != 'approved') {
+          context.read<DriverCubit>().refreshProfile();
+        } else if (driver != null && driver.verificationStatus.toLowerCase() == 'approved') {
+          _statusPollingTimer?.cancel();
+        }
+      }
+    });
+  }
+
+  Future<void> _acquireInitialDriverLocation() async {
+    try {
+      final loc = await DriverLocationService.instance.getCurrentLocation();
+      if (loc != null && loc.latitude != null && loc.longitude != null && mounted) {
+        final pos = LatLng(loc.latitude!, loc.longitude!);
+        _dashMapController.move(pos, 15.0);
+        setState(() {});
+      }
+    } catch (e) {
+      debugPrint('[DRIVER DASHBOARD] Initial location error: $e');
+    }
   }
 
   Future<void> _checkActiveTripAndRestore() async {
@@ -103,9 +134,9 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final driver = context.read<DriverCubit>().state.currentDriver;
       final token = context.read<DriverCubit>().state.token;
-      if (driver != null && driver.isOnline) {
+      if (driver != null) {
         DriverSocketService.instance.connect(driver.id);
-        if (token != null) {
+        if (driver.isOnline && token != null) {
           context.read<RideRequestCubit>().fetchPendingRequests(token);
         }
       }
@@ -113,6 +144,69 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
 
     DriverSocketService.instance.incomingRequestNotifier.addListener(_onNewIncomingRequest);
     DriverSocketService.instance.alertNotificationNotifier.addListener(_onSocketAlert);
+    DriverSocketService.instance.driverStatusNotifier.addListener(_onDriverStatusUpdated);
+    DriverSocketService.instance.fareUpdatedNotifier.addListener(_onFareConfigUpdated);
+  }
+
+  void _onFareConfigUpdated() {
+    if (mounted) {
+      _loadDashboard();
+      final fare = DriverSocketService.instance.fareUpdatedNotifier.value;
+      if (fare != null) {
+        final cat = fare['category']?.toString() ?? 'Rates';
+        final base = fare['base_fare'];
+        final perKm = fare['per_km'];
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('⚡ City Fare Updated for $cat: Base ₹$base, ₹$perKm/km'),
+            backgroundColor: const Color(0xFF1E293B),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
+
+  void _onDriverStatusUpdated() {
+    final statusData = DriverSocketService.instance.driverStatusNotifier.value;
+    if (statusData != null && mounted) {
+      final newStatus = statusData['verification_status']?.toString();
+      final action = statusData['action']?.toString();
+
+      // Immediately sync driver profile from backend
+      context.read<DriverCubit>().refreshProfile();
+
+      if (action == 'approve' || newStatus == 'approved') {
+        _statusPollingTimer?.cancel();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.verified_rounded, color: Colors.white),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '🎉 Account Approved! You can now turn the toggle ON to go live.',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Color(0xFF10B981),
+            duration: Duration(seconds: 5),
+          ),
+        );
+      } else if (action == 'reject' || newStatus == 'rejected') {
+        final reason = statusData['reason']?.toString() ?? 'Documents verification failed';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Account rejected by Super Admin: $reason'),
+            backgroundColor: const Color(0xFFEF4444),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
   }
 
   void _onNewIncomingRequest() {
@@ -135,14 +229,18 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
 
   @override
   void dispose() {
+    _statusPollingTimer?.cancel();
     DriverSocketService.instance.incomingRequestNotifier.removeListener(_onNewIncomingRequest);
     DriverSocketService.instance.alertNotificationNotifier.removeListener(_onSocketAlert);
+    DriverSocketService.instance.driverStatusNotifier.removeListener(_onDriverStatusUpdated);
+    DriverSocketService.instance.fareUpdatedNotifier.removeListener(_onFareConfigUpdated);
     super.dispose();
   }
 
   void _loadDashboard() {
     final driverState = context.read<DriverCubit>().state;
     if (driverState.token != null) {
+      context.read<DriverCubit>().refreshProfile();
       context.read<DriverDashboardCubit>().fetchDashboard(driverState.token!);
       if (driverState.currentDriver?.isOnline == true) {
         context.read<RideRequestCubit>().fetchPendingRequests(driverState.token!);
@@ -175,7 +273,8 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildHeader(),
-                const SizedBox(height: 20),
+                const SizedBox(height: 14),
+                _buildVerificationNoticeBanner(),
                 _buildOnlineToggle(),
                 const SizedBox(height: 20),
                 _buildLiveDriverMapPreview(),
@@ -283,6 +382,40 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
   }
 
   Future<void> _handleToggleAvailability(bool targetStatus) async {
+    final currentDriver = context.read<DriverCubit>().state.currentDriver;
+    final status = (currentDriver?.verificationStatus ?? 'pending').toLowerCase();
+
+    // Guard: Driver cannot go online if not yet approved by Super Admin
+    if (targetStatus && status != 'approved') {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: const Row(
+            children: [
+              Icon(Icons.lock_clock_rounded, color: Palette.primary, size: 26),
+              SizedBox(width: 10),
+              Text('Approval Required', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+            ],
+          ),
+          content: Text(
+            status == 'rejected'
+                ? 'Your driver account was not approved by Super Admin. Please contact support or update your compliance documents.'
+                : 'Your driver account is currently PENDING review by the Saffar Super Admin.\n\nYou cannot go online or accept passenger rides until your vehicle and documents are officially approved.',
+            style: const TextStyle(fontSize: 14, height: 1.45),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(backgroundColor: Palette.primary),
+              child: const Text('Understood', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     final success = await context.read<DriverCubit>().toggleAvailability(targetStatus);
     if (success && mounted) {
       final driver = context.read<DriverCubit>().state.currentDriver;
@@ -408,10 +541,71 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
     );
   }
 
+  Widget _buildVerificationNoticeBanner() {
+    return BlocBuilder<DriverCubit, DriverState>(
+      builder: (context, driverState) {
+        final status = (driverState.currentDriver?.verificationStatus ?? 'pending').toLowerCase();
+        if (status == 'approved') return const SizedBox.shrink();
+
+        final isPending = status == 'pending';
+        return Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isPending ? const Color(0xFFFEF3C7) : const Color(0xFFFEE2E2),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isPending ? const Color(0xFFF59E0B) : const Color(0xFFEF4444),
+              width: 1.2,
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                isPending ? Icons.pending_actions_rounded : Icons.gpp_bad_rounded,
+                color: isPending ? const Color(0xFFD97706) : const Color(0xFFDC2626),
+                size: 26,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isPending ? 'Account Pending Super Admin Approval' : 'Account Rejected / Inactive',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                        color: isPending ? const Color(0xFF92400E) : const Color(0xFF991B1B),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      isPending
+                          ? 'Your vehicle details & compliance documents have been submitted to Super Admin. You will be authorized to go live on duty once approved.'
+                          : 'Your driver account was not approved by Super Admin. Please contact support or update your vehicle documents.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.35,
+                        color: isPending ? const Color(0xFFB45309) : const Color(0xFFB91C1C),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildOnlineToggle() {
     return BlocBuilder<DriverCubit, DriverState>(
       builder: (context, driverState) {
-        final isOnline = driverState.currentDriver?.active ?? false;
+        final isApproved = (driverState.currentDriver?.verificationStatus ?? 'pending').toLowerCase() == 'approved';
+        final isOnline = isApproved && (driverState.currentDriver?.active ?? false);
         final isLoading = driverState.isLoading;
 
         return Container(
@@ -449,7 +643,9 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                               width: 10,
                               height: 10,
                               decoration: BoxDecoration(
-                                color: isOnline ? const Color(0xFF4ADE80) : Colors.grey.shade500,
+                                color: isOnline
+                                    ? const Color(0xFF4ADE80)
+                                    : (isApproved ? Colors.grey.shade500 : const Color(0xFFF59E0B)),
                                 shape: BoxShape.circle,
                                 boxShadow: isOnline
                                     ? [
@@ -464,23 +660,27 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              isOnline ? 'LIVE ON DUTY' : 'OFFLINE / OFF DUTY',
+                              isOnline
+                                  ? 'LIVE ON DUTY'
+                                  : (!isApproved ? 'PENDING APPROVAL' : 'OFFLINE / OFF DUTY'),
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: 0.8,
-                                color: isOnline ? const Color(0xFFBBF7D0) : Colors.grey.shade400,
+                                color: isOnline
+                                    ? const Color(0xFFBBF7D0)
+                                    : (!isApproved ? const Color(0xFFFCD34D) : Colors.grey.shade400),
                               ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          isOnline
-                              ? 'Accepting ride requests'
-                              : 'Go online to start receiving rides',
+                          !isApproved
+                              ? 'Awaiting Super Admin approval to go live'
+                              : (isOnline ? 'Accepting ride requests' : 'Go online to start receiving rides'),
                           style: const TextStyle(
-                            fontSize: 18,
+                            fontSize: 17,
                             fontWeight: FontWeight.w800,
                             color: Colors.white,
                           ),
@@ -500,7 +700,8 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                         borderRadius: BorderRadius.circular(18),
                         color: isOnline
                             ? Colors.white.withValues(alpha: 0.35)
-                            : Colors.white.withValues(alpha: 0.15),
+                            : (!isApproved ? const Color(0xFFD97706).withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.15)),
+                        border: !isApproved ? Border.all(color: const Color(0xFFF59E0B), width: 1.5) : null,
                       ),
                       child: AnimatedAlign(
                         duration: const Duration(milliseconds: 300),
@@ -528,13 +729,13 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                                   ],
                                 ),
                                 child: Icon(
-                                  isOnline
-                                      ? Icons.power_settings_new_rounded
-                                      : Icons.power_off_outlined,
+                                  !isApproved
+                                      ? Icons.lock_rounded
+                                      : (isOnline ? Icons.power_settings_new_rounded : Icons.power_off_outlined),
                                   size: 18,
-                                  color: isOnline
-                                      ? const Color(0xFF15803D)
-                                      : Colors.grey.shade700,
+                                  color: !isApproved
+                                      ? const Color(0xFFD97706)
+                                      : (isOnline ? const Color(0xFF15803D) : Colors.grey.shade700),
                                 ),
                               ),
                       ),
@@ -625,10 +826,11 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         return ValueListenableBuilder<LocationData?>(
           valueListenable: DriverLocationService.instance.currentLocationNotifier,
           builder: (context, loc, _) {
-            final lat = loc?.latitude ?? driverState.currentDriver?.currentLat ?? 16.7050;
-            final lon = loc?.longitude ?? driverState.currentDriver?.currentLng ?? 74.2433;
+            final locData = loc ?? DriverLocationService.instance.currentLocation;
+            final lat = locData?.latitude ?? driverState.currentDriver?.currentLat ?? MapConfig.defaultCenter.latitude;
+            final lon = locData?.longitude ?? driverState.currentDriver?.currentLng ?? MapConfig.defaultCenter.longitude;
             final driverPos = LatLng(lat, lon);
-            final heading = loc?.heading ?? driverState.currentDriver?.heading ?? 0.0;
+            final heading = locData?.heading ?? driverState.currentDriver?.heading ?? 0.0;
             final category = driverState.currentDriver?.vehicleName ?? 'Auto';
 
             return Container(
@@ -672,8 +874,13 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                       top: 10,
                       right: 10,
                       child: GestureDetector(
-                        onTap: () {
-                          _dashMapController.move(driverPos, 15.0);
+                        onTap: () async {
+                          final fresh = await DriverLocationService.instance.getCurrentLocation();
+                          if (fresh != null && fresh.latitude != null && fresh.longitude != null) {
+                            _dashMapController.move(LatLng(fresh.latitude!, fresh.longitude!), 15.0);
+                          } else {
+                            _dashMapController.move(driverPos, 15.0);
+                          }
                         },
                         child: Container(
                           padding: const EdgeInsets.all(8),

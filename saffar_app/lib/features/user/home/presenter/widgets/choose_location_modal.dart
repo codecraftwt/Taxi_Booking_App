@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:saffar_app/core/palette.dart';
 import 'package:saffar_app/core/service_locator.dart';
 import 'package:saffar_app/features/ride/data/repositories/ride_repo.dart';
@@ -25,16 +27,33 @@ class PlaceItem {
     this.lon,
   });
 
-  factory PlaceItem.fromMap(Map<String, dynamic> map) {
+  factory PlaceItem.fromMap(Map<String, dynamic> map, {double? userLat, double? userLon}) {
+    final lat = (map['lat'] as num?)?.toDouble();
+    final lon = (map['lon'] as num?)?.toDouble();
+
+    String distStr = map['distance_km']?.toString() ?? '3.5 km';
+    int durMins = int.tryParse(map['duration_mins']?.toString() ?? '12') ?? 12;
+
+    if (userLat != null && userLon != null && lat != null && lon != null) {
+      final directDistKm = const Distance().as(
+        LengthUnit.Kilometer,
+        LatLng(userLat, userLon),
+        LatLng(lat, lon),
+      );
+      final roadKm = directDistKm * 1.25;
+      distStr = roadKm < 1.0 ? '${(roadKm * 1000).round()} m' : '${roadKm.toStringAsFixed(1)} km';
+      durMins = math.max(3, (roadKm * 2.5).round());
+    }
+
     return PlaceItem(
       id: map['id']?.toString() ?? '',
       place: map['place']?.toString() ?? 'Selected Location',
       street: map['street']?.toString() ?? '',
       type: map['type']?.toString() ?? 'popular',
-      distanceKm: map['distance_km']?.toString() ?? '4.5 km',
-      durationMins: int.tryParse(map['duration_mins']?.toString() ?? '15') ?? 15,
-      lat: (map['lat'] as num?)?.toDouble(),
-      lon: (map['lon'] as num?)?.toDouble(),
+      distanceKm: distStr,
+      durationMins: durMins,
+      lat: lat,
+      lon: lon,
     );
   }
 }
@@ -51,6 +70,8 @@ typedef OnLocationSelectedCallback = void Function(
 class ChooseLocationModal extends StatefulWidget {
   final String initialPickup;
   final String? initialDestination;
+  final double? pickupLat;
+  final double? pickupLon;
   final bool focusDestination;
   final OnLocationSelectedCallback onLocationSelected;
 
@@ -58,6 +79,8 @@ class ChooseLocationModal extends StatefulWidget {
     Key? key,
     this.initialPickup = 'Current Location',
     this.initialDestination,
+    this.pickupLat,
+    this.pickupLon,
     this.focusDestination = true,
     required this.onLocationSelected,
   }) : super(key: key);
@@ -66,6 +89,8 @@ class ChooseLocationModal extends StatefulWidget {
     BuildContext context, {
     String initialPickup = 'Current Location',
     String? initialDestination,
+    double? pickupLat,
+    double? pickupLon,
     bool focusDestination = true,
     required OnLocationSelectedCallback onLocationSelected,
   }) {
@@ -76,6 +101,8 @@ class ChooseLocationModal extends StatefulWidget {
       builder: (ctx) => ChooseLocationModal(
         initialPickup: initialPickup,
         initialDestination: initialDestination,
+        pickupLat: pickupLat,
+        pickupLon: pickupLon,
         focusDestination: focusDestination,
         onLocationSelected: onLocationSelected,
       ),
@@ -134,12 +161,16 @@ class _ChooseLocationModalState extends State<ChooseLocationModal> {
     setState(() => _isLoading = true);
     try {
       final saved = await _rideRepo.getSavedAndRecentPlaces();
-      final places = await _rideRepo.searchPlaces('');
+      final places = await _rideRepo.searchPlaces(
+        '',
+        latitude: widget.pickupLat,
+        longitude: widget.pickupLon,
+      );
 
       if (mounted) {
         setState(() {
           _savedPlacesData = saved;
-          _placesList = places.map((m) => PlaceItem.fromMap(m)).toList();
+          _placesList = places.map((m) => PlaceItem.fromMap(m, userLat: widget.pickupLat, userLon: widget.pickupLon)).toList();
           _isLoading = false;
         });
       }
@@ -153,10 +184,14 @@ class _ChooseLocationModalState extends State<ChooseLocationModal> {
     _debounceTimer = Timer(const Duration(milliseconds: 300), () async {
       setState(() => _isLoading = true);
       try {
-        final results = await _rideRepo.searchPlaces(query.trim());
+        final results = await _rideRepo.searchPlaces(
+          query.trim(),
+          latitude: widget.pickupLat,
+          longitude: widget.pickupLon,
+        );
         if (mounted) {
           setState(() {
-            _placesList = results.map((m) => PlaceItem.fromMap(m)).toList();
+            _placesList = results.map((m) => PlaceItem.fromMap(m, userLat: widget.pickupLat, userLon: widget.pickupLon)).toList();
             _isLoading = false;
           });
         }
@@ -459,15 +494,20 @@ class _ChooseLocationModalState extends State<ChooseLocationModal> {
                   bgColor: const Color(0xFFE0F2FE),
                   onTap: () {
                     final home = _savedPlacesData?['home'];
-                    final p = PlaceItem(
-                      id: home?['id'] ?? 'home',
-                      place: home?['place'] ?? 'Home',
-                      street: home?['street'] ?? '12 Elm Street, Indiranagar',
-                      type: 'home',
-                      distanceKm: home?['distance_km'] ?? '3.5 km',
-                      durationMins: home?['duration_mins'] ?? 11,
-                    );
-                    _confirmSelection(p);
+                    if (home != null && home['street'] != null && (home['street'] as String).isNotEmpty) {
+                      final p = PlaceItem(
+                        id: home['id'] ?? 'home',
+                        place: home['place'] ?? 'Home',
+                        street: home['street'],
+                        type: 'home',
+                        distanceKm: home['distance_km'] ?? '1.0 km',
+                        durationMins: home['duration_mins'] ?? 5,
+                      );
+                      _confirmSelection(p);
+                    } else {
+                      _destController.text = 'Home';
+                      _onSearchChanged('Home');
+                    }
                   },
                 ),
                 const SizedBox(width: 8),
@@ -478,15 +518,20 @@ class _ChooseLocationModalState extends State<ChooseLocationModal> {
                   bgColor: const Color(0xFFFEF3C7),
                   onTap: () {
                     final office = _savedPlacesData?['office'];
-                    final p = PlaceItem(
-                      id: office?['id'] ?? 'office',
-                      place: office?['place'] ?? 'Office (Work)',
-                      street: office?['street'] ?? 'Tech Park BD, Tower C',
-                      type: 'work',
-                      distanceKm: office?['distance_km'] ?? '8.4 km',
-                      durationMins: office?['duration_mins'] ?? 22,
-                    );
-                    _confirmSelection(p);
+                    if (office != null && office['street'] != null && (office['street'] as String).isNotEmpty) {
+                      final p = PlaceItem(
+                        id: office['id'] ?? 'office',
+                        place: office['place'] ?? 'Office (Work)',
+                        street: office['street'],
+                        type: 'work',
+                        distanceKm: office['distance_km'] ?? '2.0 km',
+                        durationMins: office['duration_mins'] ?? 10,
+                      );
+                      _confirmSelection(p);
+                    } else {
+                      _destController.text = 'Office';
+                      _onSearchChanged('Office');
+                    }
                   },
                 ),
                 const SizedBox(width: 8),

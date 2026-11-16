@@ -17,12 +17,12 @@ class Ride {
     required this.cancelled,
     required this.price,
     this.discountPrice,
-    this.otp = '4829',
-    this.vehicleType = 'Saffar Auto',
-    this.paymentMethod = 'Paid via UPI',
-    this.co2Saved = 1.2,
-    this.rating = 5.0,
-    this.status = 'completed',
+    this.otp = '',
+    this.vehicleType = '',
+    this.paymentMethod = '',
+    this.co2Saved = 0.0,
+    this.rating = 0.0,
+    this.status = 'created',
   });
 
   final String id;
@@ -80,15 +80,10 @@ class Ride {
       discountPrice: map['discount_price'] != null
           ? double.tryParse(map['discount_price'].toString())
           : null,
-      otp: map['otp'] != null ? map['otp'].toString() : '4829',
-      vehicleType: map['vehicle_type'] != null
-          ? map['vehicle_type'].toString()
-          : (map['driver']?['vehicle_name']?.toString().contains('Auto') == true
-              ? 'Saffar Auto'
-              : 'Saffar Auto'),
-      paymentMethod: map['payment_method'] != null
-          ? map['payment_method'].toString()
-          : 'Paid via UPI',
+      otp: map['otp']?.toString() ?? '',
+      vehicleType: map['vehicle_type']?.toString() ??
+          map['driver']?['vehicle_name']?.toString() ?? '',
+      paymentMethod: map['payment_method']?.toString() ?? '',
       co2Saved: map['co2_saved'] != null
           ? double.tryParse(map['co2_saved'].toString()) ?? 1.2
           : 1.2,

@@ -6,8 +6,11 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:saffar_app/core/config/map_config.dart';
 import 'package:saffar_app/core/palette.dart';
+import 'package:saffar_app/core/service_locator.dart';
 import 'package:saffar_app/core/services/map_service.dart';
 import 'package:saffar_app/features/find_ride/presenter/widgets/ride_selection_bottom_sheet.dart';
+import 'package:saffar_app/features/location/data/repositories/location_repo.dart';
+import 'package:saffar_app/features/search_places_and_get_route/data/repositories/search_places_repo.dart';
 import 'package:saffar_app/features/user/presenter/cubits/user_cubit.dart';
 import 'package:saffar_app/core/models/address.dart';
 import 'package:saffar_app/core/models/driver.dart';
@@ -397,7 +400,39 @@ class _ViewMapScreenState extends State<ViewMapScreen>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _onDonePressed();
       });
+    } else if (_pickupAddress == null) {
+      _acquireInitialLocationForViewMap();
     }
+  }
+
+  Future<void> _acquireInitialLocationForViewMap() async {
+    try {
+      final loc = await sl<LocationRepo>().getCurrentLatLng();
+      if (loc != null && mounted) {
+        setState(() {
+          _pickupAddress = Address(
+            place: 'Current Location',
+            street: 'Live GPS Location',
+            latLng: loc,
+          );
+          _pickupTextEditingController.text = 'Current Location';
+        });
+        _mapController.move(loc, 15.0);
+
+        try {
+          final addr = await sl<SearchPlacesRepo>().getAddressFromLatLng(loc.latitude, loc.longitude);
+          if (addr != null && mounted) {
+            final text = [addr.street, addr.place].where((s) => s != null && s.isNotEmpty).join(', ');
+            if (text.isNotEmpty) {
+              setState(() {
+                _pickupAddress = addr;
+                _pickupTextEditingController.text = text;
+              });
+            }
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
   }
 
   @override
@@ -977,7 +1012,7 @@ class _ViewMapScreenState extends State<ViewMapScreen>
                                   )
                                 : RideDriverInfoWidget(
                                     driver: rideDriverState.driver,
-                                    otp: '4829',
+                                    otp: rideDriverState.otp ?? '—',
                                     pickupSpot:
                                         _pickupAddress?.street ?? _pickupAddress?.place ?? 'Pickup Point',
                                     rideFare: _selectedPrice,

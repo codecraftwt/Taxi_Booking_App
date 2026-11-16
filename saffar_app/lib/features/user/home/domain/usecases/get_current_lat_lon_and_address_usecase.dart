@@ -1,4 +1,3 @@
-import 'package:saffar_app/core/errors/custom_exception.dart';
 import 'package:saffar_app/core/service_locator.dart';
 import 'package:saffar_app/features/location/data/repositories/location_repo.dart';
 import 'package:saffar_app/features/search_places_and_get_route/data/repositories/search_places_repo.dart';
@@ -18,14 +17,22 @@ class GetCurrentLatLngAndAddressUsecase {
         final double lat = currentPosition.latitude;
         final double lon = currentPosition.longitude;
 
-        final Address address = await _searchPlacesRepo.getAddressFromLatLng(
-          lat,
-          lon,
-        );
-
-        return address;
+        try {
+          final Address address = await _searchPlacesRepo.getAddressFromLatLng(
+            lat,
+            lon,
+          );
+          return address;
+        } catch (_) {
+          // If reverse geocoding is slow or fails, still return the actual GPS coordinates
+          return Address(
+            place: 'Current Location',
+            street: 'Live GPS Location',
+            latLng: currentPosition,
+          );
+        }
       }
-    } on CustomException {
+    } catch (_) {
       return null;
     }
     return null;
