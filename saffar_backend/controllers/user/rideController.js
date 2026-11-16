@@ -136,7 +136,7 @@ const addRideAndRideAddresses = async (req, res) => {
     }
     const price = parseFloat(req.body?.price ?? 0.0);
     const discountPrice = req.body?.discount_price ? parseFloat(req.body.discount_price) : 0.0;
-    const vehicleType = req.body?.vehicle_type ?? "Saffar Auto";
+    const vehicleType = req.body?.vehicle_type || req.body?.category || "Saffar Auto";
     const paymentMethod = req.body?.payment_method ?? "Paid via Cash";
     const customId = req.body?.id;
     const startTime = req.body?.start_time ? new Date(req.body.start_time) : new Date();
@@ -395,22 +395,36 @@ const getPriceInfoAndCalculateRidePrice = async (req, res) => {
       });
     }
 
-    const priceRes = await query("SELECT * FROM prices LIMIT 1");
+    const category = req.query.category || req.body?.category || "Auto";
+    const fareRes = await query(
+      "SELECT base_fare, per_km, per_minute, minimum_fare FROM fare_configs WHERE LOWER(category) = LOWER($1) OR LOWER(category) LIKE LOWER($2) ORDER BY base_fare ASC LIMIT 1",
+      [category, `%${category.toLowerCase()}%`]
+    );
+
     let basePrice = 50.0;
     let pricePerKm = 15.0;
+    let minFare = 50.0;
 
-    if (priceRes.rows.length > 0) {
-      basePrice = parseFloat(priceRes.rows[0].base_price);
-      pricePerKm = parseFloat(priceRes.rows[0].price_per_km);
+    if (fareRes.rows.length > 0) {
+      basePrice = parseFloat(fareRes.rows[0].base_fare);
+      pricePerKm = parseFloat(fareRes.rows[0].per_km);
+      minFare = parseFloat(fareRes.rows[0].minimum_fare);
     } else {
-      await query("INSERT INTO prices (base_price, price_per_km) VALUES ($1, $2)", [basePrice, pricePerKm]);
+      const priceRes = await query("SELECT * FROM prices LIMIT 1");
+      if (priceRes.rows.length > 0) {
+        basePrice = parseFloat(priceRes.rows[0].base_price);
+        pricePerKm = parseFloat(priceRes.rows[0].price_per_km);
+      }
     }
 
     const dist = parseFloat(rideDistanceInKm);
-    const totalPrice = basePrice + dist * pricePerKm;
+    const totalPrice = Math.max(minFare, Math.round(basePrice + dist * pricePerKm));
 
     return res.json({
       total_price: totalPrice,
+      base_price: basePrice,
+      price_per_km: pricePerKm,
+      minimum_fare: minFare,
     });
   } catch (error) {
     console.log(`Error in getPriceInfoAndCalculateRidePrice: ${error}`);
@@ -898,6 +912,8 @@ const DEFAULT_POPULAR_PLACES = [
 const searchPlaces = async (req, res) => {
   try {
     const rawQuery = (req.query?.query || "").trim();
+    const userLat = req.query?.latitude ? parseFloat(req.query.latitude) : null;
+    const userLon = req.query?.longitude ? parseFloat(req.query.longitude) : null;
 
     if (!rawQuery) {
       // If query is empty, return recent / saved places from database
@@ -906,16 +922,28 @@ const searchPlaces = async (req, res) => {
         const resDb = await query(
           "SELECT id, place, street, lat, lon FROM addresses ORDER BY id DESC LIMIT 8"
         );
-        initialPlaces = resDb.rows.map((r, i) => ({
-          id: r.id || `addr_${i}`,
-          place: r.place || r.street.split(",")[0],
-          street: r.street,
-          type: "recent",
-          distance_km: `${(2.0 + i * 1.5).toFixed(1)} km`,
-          duration_mins: Math.round(5 + i * 4),
-          lat: parseFloat(r.lat),
-          lon: parseFloat(r.lon),
-        }));
+        initialPlaces = resDb.rows.map((r, i) => {
+          const lat = parseFloat(r.lat);
+          const lon = parseFloat(r.lon);
+          let distText = `${(2.0 + i * 1.5).toFixed(1)} km`;
+          let durMins = Math.round(5 + i * 4);
+          if (userLat != null && userLon != null && !isNaN(lat) && !isNaN(lon)) {
+            const directMeters = calculateHaversineDistance(userLat, userLon, lat, lon);
+            const roadKm = (directMeters * 1.25) / 1000.0;
+            distText = roadKm < 1.0 ? `${Math.round(roadKm * 1000)} m` : `${roadKm.toFixed(1)} km`;
+            durMins = Math.max(3, Math.round(roadKm * 2.5));
+          }
+          return {
+            id: r.id || `addr_${i}`,
+            place: r.place || r.street.split(",")[0],
+            street: r.street,
+            type: "recent",
+            distance_km: distText,
+            duration_mins: durMins,
+            lat: lat,
+            lon: lon,
+          };
+        });
       } catch (_) {}
       return res.json({ places: initialPlaces });
     }
@@ -927,24 +955,36 @@ const searchPlaces = async (req, res) => {
         "SELECT id, place, street, lat, lon FROM addresses WHERE LOWER(place) LIKE $1 OR LOWER(street) LIKE $1 LIMIT 6",
         [`%${rawQuery.toLowerCase()}%`]
       );
-      dbPlaces = resDb.rows.map((r, i) => ({
-        id: r.id || `addr_${i}`,
-        place: r.place || r.street.split(",")[0],
-        street: r.street,
-        type: "recent",
-        distance_km: `${(2.0 + i * 1.2).toFixed(1)} km`,
-        duration_mins: Math.round(5 + i * 3),
-        lat: parseFloat(r.lat),
-        lon: parseFloat(r.lon),
-      }));
+      dbPlaces = resDb.rows.map((r, i) => {
+        const lat = parseFloat(r.lat);
+        const lon = parseFloat(r.lon);
+        let distText = `${(2.0 + i * 1.2).toFixed(1)} km`;
+        let durMins = Math.round(5 + i * 3);
+        if (userLat != null && userLon != null && !isNaN(lat) && !isNaN(lon)) {
+          const directMeters = calculateHaversineDistance(userLat, userLon, lat, lon);
+          const roadKm = (directMeters * 1.25) / 1000.0;
+          distText = roadKm < 1.0 ? `${Math.round(roadKm * 1000)} m` : `${roadKm.toFixed(1)} km`;
+          durMins = Math.max(3, Math.round(roadKm * 2.5));
+        }
+        return {
+          id: r.id || `addr_${i}`,
+          place: r.place || r.street.split(",")[0],
+          street: r.street,
+          type: "recent",
+          distance_km: distText,
+          duration_mins: durMins,
+          lat: lat,
+          lon: lon,
+        };
+      });
     } catch (dbErr) {
       console.warn("Could not query addresses table:", dbErr.message);
     }
 
-    // 2. Query live forward geocoder (Photon OSM with fuzzy matching for Maharashtra & India)
+    // 2. Query live forward geocoder (Photon OSM with location bias and real-distance calculation)
     let geoPlaces = [];
     try {
-      geoPlaces = await routingService.forwardGeocode(rawQuery, 8);
+      geoPlaces = await routingService.forwardGeocode(rawQuery, 8, userLat, userLon);
     } catch (geoErr) {
       console.warn("Live forward geocode warning:", geoErr.message);
     }
@@ -1248,15 +1288,36 @@ const getNearbyVehicleAvailability = async (req, res) => {
       qualifyingDrivers = driversWithDist.filter((d) => d.distance_km <= requestedRadius);
     }
 
-    // Standard vehicle categories
+    // Standard vehicle categories with live dynamic Super Admin rates from fare_configs
     const standardCategories = ["Bike", "Auto", "Mini Car", "Sedan", "SUV"];
-    const baseFares = {
-      "Bike": 49.0,
-      "Auto": 82.0,
-      "Mini Car": 145.0,
-      "Sedan": 210.0,
-      "SUV": 280.0,
+    const dynamicBaseFares = {
+      "Bike": 20.0,
+      "Auto": 30.0,
+      "Mini Car": 50.0,
+      "Sedan": 70.0,
+      "SUV": 90.0,
     };
+    const dynamicPerKmFares = {
+      "Bike": 8.0,
+      "Auto": 12.0,
+      "Mini Car": 15.0,
+      "Sedan": 18.0,
+      "SUV": 22.0,
+    };
+
+    try {
+      const fareConfigsRes = await query("SELECT category, base_fare, per_km, minimum_fare FROM fare_configs WHERE is_active = true");
+      for (const f of fareConfigsRes.rows) {
+        const c = (f.category || "").toLowerCase();
+        const bf = parseFloat(f.base_fare);
+        const pk = parseFloat(f.per_km);
+        if (c === "bike") { dynamicBaseFares["Bike"] = bf; dynamicPerKmFares["Bike"] = pk; }
+        else if (c === "auto") { dynamicBaseFares["Auto"] = bf; dynamicPerKmFares["Auto"] = pk; }
+        else if (c === "car" || c === "mini" || c === "mini car") { dynamicBaseFares["Mini Car"] = bf; dynamicPerKmFares["Mini Car"] = pk; }
+        else if (c.includes("sedan")) { dynamicBaseFares["Sedan"] = bf; dynamicPerKmFares["Sedan"] = pk; }
+        else if (c.includes("suv")) { dynamicBaseFares["SUV"] = bf; dynamicPerKmFares["SUV"] = pk; }
+      }
+    } catch (_) {}
 
     const categoryDetails = {};
     for (const cat of standardCategories) {
@@ -1274,7 +1335,8 @@ const getNearbyVehicleAvailability = async (req, res) => {
           closest_distance_km: closestDist,
           eta_mins: etaMins,
           eta_text: `${etaMins} mins`,
-          base_fare: baseFares[cat] || 50.0,
+          base_fare: dynamicBaseFares[cat] || 50.0,
+          per_km: dynamicPerKmFares[cat] || 15.0,
         };
       } else {
         categoryDetails[cat] = {
@@ -1283,7 +1345,8 @@ const getNearbyVehicleAvailability = async (req, res) => {
           closest_distance_km: null,
           eta_mins: null,
           eta_text: "No drivers",
-          base_fare: baseFares[cat] || 50.0,
+          base_fare: dynamicBaseFares[cat] || 50.0,
+          per_km: dynamicPerKmFares[cat] || 15.0,
         };
       }
     }

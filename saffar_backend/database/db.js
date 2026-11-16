@@ -183,7 +183,7 @@ async function initPostgresDatabase() {
         category VARCHAR(50) NOT NULL,
         model VARCHAR(255) NOT NULL,
         registration_number VARCHAR(100) NOT NULL,
-        color VARCHAR(50) NOT NULL,
+        color VARCHAR(50) DEFAULT 'Standard',
         is_active BOOLEAN DEFAULT TRUE,
         driving_license_number VARCHAR(100),
         driving_license_expiry VARCHAR(50),
@@ -305,32 +305,11 @@ async function initPostgresDatabase() {
       CREATE INDEX IF NOT EXISTS idx_ride_cancellations_user_id ON ride_cancellations(user_id);
     `);
 
-    // Seed initial price if none exists
+    // Base pricing configuration if none exists
     const priceRes = await client.query(`SELECT * FROM prices LIMIT 1;`);
     if (priceRes.rows.length === 0) {
       await client.query(`INSERT INTO prices (base_price, price_per_km) VALUES (50.0, 15.0);`);
-      console.log("Seeded default pricing: base_price=50, price_per_km=15");
     }
-
-    // Seed default user_001 for seamless rider testing
-    await client.query(`
-      INSERT INTO users (id, name, phone, password, email, image_url, wallet_balance, address)
-      VALUES (
-        'user_001',
-        'Sameer Verma',
-        '9876543210',
-        '$2b$10$T8Z/9n07yVfRkH3dO1f0IeF.1.mY0t27p8L5uCqR3j3p/Yw/z9kUe',
-        'sameer.v@example.com',
-        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-        1240.0,
-        '12 Elm Street, Indiranagar, Bengaluru'
-      )
-      ON CONFLICT (id) DO UPDATE SET 
-        name = EXCLUDED.name, 
-        email = EXCLUDED.email,
-        wallet_balance = COALESCE(users.wallet_balance, 0.0),
-        address = COALESCE(users.address, EXCLUDED.address);
-    `);
 
     console.log("All PostgreSQL base tables verified/created successfully.");
 

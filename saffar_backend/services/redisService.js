@@ -9,15 +9,32 @@ let redisClient = null;
 let isRedisConnected = false;
 
 async function initRedis() {
-  const redisUrl = process.env.REDIS_URL || (process.env.REDIS_HOST ? `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT || 6379}` : null);
-  
-  if (!redisUrl) {
-    console.log("[REDIS] No REDIS_URL provided. Operating with in-memory fast ephemeral store.");
+  const redisHost = process.env.REDIS_HOST;
+  const redisPort = process.env.REDIS_PORT || 6379;
+  const redisPassword = process.env.REDIS_PASSWORD;
+  const redisUrl = process.env.REDIS_URL;
+
+  if (!redisUrl && !redisHost) {
+    console.log("[REDIS] No REDIS_HOST or REDIS_URL provided. Operating with in-memory fast ephemeral store.");
     return;
   }
 
+  const clientOptions = {};
+  if (redisUrl) {
+    clientOptions.url = redisUrl;
+  } else {
+    clientOptions.socket = {
+      host: redisHost,
+      port: parseInt(redisPort, 10),
+    };
+  }
+
+  if (redisPassword) {
+    clientOptions.password = redisPassword;
+  }
+
   try {
-    redisClient = createClient({ url: redisUrl });
+    redisClient = createClient(clientOptions);
     redisClient.on("error", (err) => {
       // Graceful error logging without crashing Node process
       if (isRedisConnected) {

@@ -10,7 +10,9 @@ function normalizeCategory(type) {
   const lower = type.toLowerCase();
   if (lower.includes("bike")) return "Bike";
   if (lower.includes("auto")) return "Auto";
-  if (lower.includes("car") || lower.includes("mini") || lower.includes("sedan") || lower.includes("suv")) return "Car";
+  if (lower.includes("sedan")) return "Sedan";
+  if (lower.includes("suv")) return "SUV";
+  if (lower.includes("car") || lower.includes("mini")) return "Car";
   return type;
 }
 
@@ -91,7 +93,12 @@ async function findAndRankEligibleDrivers({
       AND COALESCE(da.state, 'ONLINE_AVAILABLE') NOT IN ('OFFLINE', 'ON_TRIP', 'TEMPORARILY_UNAVAILABLE')
       AND COALESCE(d.verification_status, 'approved') ILIKE 'approved'
       AND dv.verification_status ILIKE 'approved'
-      AND (dv.category ILIKE $1 OR dv.category = $2)
+      AND (
+        dv.category ILIKE $1 
+        OR dv.category ILIKE $2 
+        OR (dv.category ILIKE '%Car%' AND $2 IN ('Sedan', 'SUV', 'Car', 'Mini Car'))
+        OR ($2 = 'Car' AND dv.category IN ('Sedan', 'SUV', 'Mini Car', 'Car'))
+      )
       AND (d.last_location_updated_at IS NOT NULL AND d.last_location_updated_at >= NOW() - ($3 || ' seconds')::INTERVAL)
       AND NOT EXISTS (
         SELECT 1 FROM rides r 
@@ -269,6 +276,32 @@ async function acceptRideOffer(rideId, driverId) {
         code: "RIDE_ALREADY_ACCEPTED",
         message: "Another driver has already accepted this booking.",
       };
+    }
+
+    // 2a. Check if the specific driver's offer or request has already expired
+    const offerCheck = await client.query(
+      `SELECT status, expires_at FROM ride_offers 
+       WHERE ride_id = $1 AND driver_id = $2
+       UNION ALL
+       SELECT status, expires_at FROM ride_requests
+       WHERE ride_id = $1 AND driver_id = $2
+       LIMIT 1;`,
+      [rideId, driverId]
+    );
+
+    if (offerCheck.rows.length > 0) {
+      const offer = offerCheck.rows[0];
+      const isExpired =
+        (offer.expires_at && new Date(offer.expires_at).getTime() < Date.now()) ||
+        (offer.status || "").toUpperCase() === "EXPIRED";
+      if (isExpired) {
+        await client.query("ROLLBACK;");
+        return {
+          success: false,
+          code: "REQUEST_EXPIRED",
+          message: "This ride offer has expired.",
+        };
+      }
     }
 
     // 2b. Ensure the driver has no conflicting active ride

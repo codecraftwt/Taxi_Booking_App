@@ -297,11 +297,6 @@ async function up(client) {
       created_at TIMESTAMP WITH TIME ZONE DEFAULT (NOW() AT TIME ZONE 'UTC')
     );
     CREATE INDEX IF NOT EXISTS idx_wallet_transactions_wallet_id ON wallet_transactions(wallet_id);
-
-    -- Seed user_001 wallet
-    INSERT INTO wallets (id, entity_type, entity_id, balance_minor)
-    VALUES ('wal_user_001', 'USER', 'user_001', 124000)
-    ON CONFLICT (entity_type, entity_id) DO NOTHING;
   `);
 
   // 14. Normalized Ratings Table

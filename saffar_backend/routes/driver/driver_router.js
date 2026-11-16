@@ -36,8 +36,12 @@ const {
   verifyRideStartOtp,
 } = require("../../controllers/rideRequestController");
 const { validateDriverToken } = require("../../middlewares/token_middleware");
+const { getPublicFareConfigs } = require("../../controllers/shared/authController");
 
 const router = express.Router();
+
+// Vehicle pricing decided by Super Admin (public/pre-login for registration)
+router.get("/fares", getPublicFareConfigs);
 
 // Driver profile & photo
 router.get("/profile", validateDriverToken, getDriverProfile);

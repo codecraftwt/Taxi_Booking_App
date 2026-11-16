@@ -55,6 +55,22 @@ async function runTests() {
   try {
     // 1. Authenticate as Driver
     console.log("[TEST 1] Authenticating as Driver...");
+    const bcrypt = require("bcrypt");
+    const hashedPw = await bcrypt.hash("password123", 10);
+    await query(
+      `INSERT INTO drivers (id, name, phone, password, active, is_online, verification_status, vehicle_name, vehicle_model, vehicle_number)
+       VALUES ('drv_test_avail', 'Test Driver', '9988776655', $1, true, false, 'approved', 'Bajaj Auto', 'Compact', 'KA 01 TR 9999')
+       ON CONFLICT (phone) DO UPDATE SET password = $1, verification_status = 'approved', active = true;`,
+      [hashedPw]
+    );
+
+    // Also ensure driver has an active approved vehicle
+    await query(
+      `INSERT INTO driver_vehicles (id, driver_id, category, model, registration_number, verification_status, is_active)
+       VALUES ('veh_test_avail', 'drv_test_avail', 'Auto', 'Bajaj Compact', 'KA 01 TR 9999', 'approved', true)
+       ON CONFLICT (id) DO UPDATE SET verification_status = 'approved', is_active = true;`
+    );
+
     const authRes = await makeRequest("POST", "/auth/driver_sign_in", {
       phone: "9988776655",
       password: "password123",
@@ -157,6 +173,11 @@ async function runTests() {
 
     // 7. Test Active Ride Protection when Going Offline
     console.log("\n[TEST 7] Testing Active Ride Protection when Going Offline...");
+    await query(
+      `INSERT INTO users (id, name, phone, password)
+       VALUES ('user_001', 'Test Passenger', '9876599999', 'pass123')
+       ON CONFLICT (id) DO NOTHING;`
+    );
     // Insert dummy in-progress ride
     const dummyRideId = `ride_test_${Date.now()}`;
     await query(

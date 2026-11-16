@@ -223,15 +223,21 @@ async function reverseGeocode(latitude, longitude) {
  * Forward geocode a human-entered query into places with GPS coordinates
  * Uses Photon (fuzzy search matching typos like 'ichalakaranji') + Nominatim OSM
  */
-async function forwardGeocode(queryText, limit = 8) {
+async function forwardGeocode(queryText, limit = 8, userLat = null, userLon = null) {
   if (!queryText || queryText.trim().length === 0) return [];
   const q = queryText.trim();
   const results = [];
   const seen = new Set();
 
-  // 1. Photon (Komoot OSM geocoder - fast fuzzy search with typo tolerance)
+  const uLat = userLat != null ? parseFloat(userLat) : null;
+  const uLon = userLon != null ? parseFloat(userLon) : null;
+
+  // 1. Photon (Komoot OSM geocoder - fast fuzzy search with typo tolerance and location bias)
   try {
-    const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=${limit}`;
+    let photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=${limit}`;
+    if (uLat != null && uLon != null && !isNaN(uLat) && !isNaN(uLon)) {
+      photonUrl += `&lat=${uLat}&lon=${uLon}`;
+    }
     const res = await fetch(photonUrl, { signal: AbortSignal.timeout(3000) });
     if (res.ok) {
       const data = await res.json();
@@ -250,7 +256,19 @@ async function forwardGeocode(queryText, limit = 8) {
               props.postcode,
             ].filter(Boolean);
             const subtitle = subtitleParts.join(", ") || props.country || "India";
-            const dedupeKey = `${name}_${coords[1].toFixed(3)}_${coords[0].toFixed(3)}`.toLowerCase();
+            const placeLat = Number(coords[1].toFixed(6));
+            const placeLon = Number(coords[0].toFixed(6));
+            const dedupeKey = `${name}_${placeLat.toFixed(3)}_${placeLon.toFixed(3)}`.toLowerCase();
+
+            let distanceKmText = "4.5 km";
+            let durationMinsNum = 15;
+            if (uLat != null && uLon != null && !isNaN(uLat) && !isNaN(uLon)) {
+              const directMeters = haversineDistance(uLat, uLon, placeLat, placeLon);
+              const roadKm = (directMeters * 1.25) / 1000.0;
+              distanceKmText = roadKm < 1.0 ? `${Math.round(roadKm * 1000)} m` : `${roadKm.toFixed(1)} km`;
+              durationMinsNum = Math.max(3, Math.round(roadKm * 2.5));
+            }
+
             if (!seen.has(dedupeKey)) {
               seen.add(dedupeKey);
               results.push({
@@ -258,10 +276,10 @@ async function forwardGeocode(queryText, limit = 8) {
                 place: name,
                 street: subtitle,
                 type: props.osm_value || "popular",
-                distance_km: "4.5 km",
-                duration_mins: 15,
-                lat: Number(coords[1].toFixed(6)),
-                lon: Number(coords[0].toFixed(6)),
+                distance_km: distanceKmText,
+                duration_mins: durationMinsNum,
+                lat: placeLat,
+                lon: placeLon,
                 source: "photon",
               });
             }
@@ -288,6 +306,16 @@ async function forwardGeocode(queryText, limit = 8) {
             const addr = item.address || {};
             const mainName = item.name || addr.road || addr.suburb || addr.city || addr.town || q;
             const dedupeKey = `${mainName}_${lat.toFixed(3)}_${lon.toFixed(3)}`.toLowerCase();
+
+            let distanceKmText = "5.0 km";
+            let durationMinsNum = 16;
+            if (uLat != null && uLon != null && !isNaN(uLat) && !isNaN(uLon)) {
+              const directMeters = haversineDistance(uLat, uLon, lat, lon);
+              const roadKm = (directMeters * 1.25) / 1000.0;
+              distanceKmText = roadKm < 1.0 ? `${Math.round(roadKm * 1000)} m` : `${roadKm.toFixed(1)} km`;
+              durationMinsNum = Math.max(3, Math.round(roadKm * 2.5));
+            }
+
             if (!seen.has(dedupeKey)) {
               seen.add(dedupeKey);
               results.push({
@@ -295,8 +323,8 @@ async function forwardGeocode(queryText, limit = 8) {
                 place: mainName,
                 street: item.display_name,
                 type: item.type || "popular",
-                distance_km: "5.0 km",
-                duration_mins: 16,
+                distance_km: distanceKmText,
+                duration_mins: durationMinsNum,
                 lat: Number(lat.toFixed(6)),
                 lon: Number(lon.toFixed(6)),
                 source: "nominatim",

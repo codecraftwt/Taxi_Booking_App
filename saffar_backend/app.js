@@ -18,6 +18,9 @@ const driverRouter = require("./routes/driver/driver_router");
 // Shared Routes
 const authRouter = require("./routes/shared/auth_router");
 const paymentRouter = require("./routes/shared/payment_router");
+
+// Super Admin Routes
+const adminRouter = require("./routes/admin/admin_router");
 const { apiRateLimiter, authRateLimiter } = require("./middlewares/security_middleware");
 
 const app = express();
@@ -55,6 +58,7 @@ app.use("/api/ride", rideRouter);
 app.use("/api/user", userRouter);
 app.use("/api/driver", driverRouter);
 app.use("/api/payment", paymentRouter);
+app.use("/api/admin", adminRouter);
 
 // 404 handler
 app.use((req, res) => {

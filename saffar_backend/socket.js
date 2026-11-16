@@ -1,10 +1,32 @@
 const { Server } = require("socket.io");
+const { createAdapter } = require("@socket.io/redis-adapter");
 const jwt = require("jsonwebtoken");
 const config = require("./config");
 const { query } = require("./database");
 const { sendPushNotification } = require("./services/fcmService");
+const { redisClient, connectRedis } = require("./config/redis");
+const { updateDriverLocation } = require("./services/driverLocationService");
 
 let io = null;
+
+async function setupRedisAdapter(ioInstance) {
+  try {
+    if (!redisClient.isOpen) {
+      await connectRedis();
+    }
+    if (redisClient.isOpen) {
+      const pubClient = redisClient.duplicate();
+      const subClient = pubClient.duplicate();
+      pubClient.on("error", (err) => console.warn("[REDIS ADAPTER PUB ERROR]", err.message));
+      subClient.on("error", (err) => console.warn("[REDIS ADAPTER SUB ERROR]", err.message));
+      await Promise.all([pubClient.connect(), subClient.connect()]);
+      ioInstance.adapter(createAdapter(pubClient, subClient));
+      console.log("[SOCKET] Redis Adapter attached successfully.");
+    }
+  } catch (err) {
+    console.warn("[SOCKET] Failed to attach Redis adapter (using in-memory fallback):", err.message);
+  }
+}
 
 function formatEventEnvelope(eventType, data) {
   return {
@@ -24,6 +46,9 @@ function initSocket(httpServer) {
     pingInterval: 10000,
     pingTimeout: 5000,
   });
+
+  // Attach Redis Adapter for horizontal scaling if Redis is connected
+  setupRedisAdapter(io);
 
   // 1. Authenticate Socket Handshake with JWT
   io.use((socket, next) => {
@@ -173,6 +198,117 @@ function initSocket(httpServer) {
       try {
         const dispatchCoordinator = require("./modules/driver_matching/dispatch.coordinator");
         const result = await dispatchCoordinator.handleDriverRejection(rideId, driverId);
+        if (typeof ack === "function") ack(result);
+      } catch (err) {
+        if (typeof ack === "function") ack({ success: false, error: err.message });
+      }
+    });
+
+    // 6. Driver Real-time GPS Location Update Telemetry
+    socket.on("driver:location:update", async (data, ack) => {
+      try {
+        const driverId =
+          socket.user?.id ||
+          (typeof data === "object" ? (data.driverId || data.driver_id) : null);
+
+        if (!driverId) {
+          if (typeof ack === "function") {
+            ack({ success: false, error: "Authentication required: missing driver identity" });
+          }
+          return;
+        }
+
+        const latitude = Number(data?.latitude ?? data?.lat);
+        const longitude = Number(data?.longitude ?? data?.lng ?? data?.lon);
+        const accuracy = Number(data?.accuracy ?? 0);
+        const speed = Number(data?.speed ?? 0);
+        const heading = Number(data?.heading ?? 0);
+        const rideId = data?.rideId || data?.ride_id;
+
+        // Update driver location, GEO index, and last-seen in Redis
+        await updateDriverLocation({
+          driverId,
+          latitude,
+          longitude,
+          accuracy,
+          speed,
+          heading,
+        });
+
+        const telemetryPayload = {
+          driverId,
+          driver_id: driverId,
+          latitude,
+          longitude,
+          accuracy,
+          speed,
+          heading,
+          rideId,
+          ride_id: rideId,
+          updatedAt: Date.now(),
+        };
+
+        // Broadcast to customer and ride room if in an active trip/pickup
+        if (rideId) {
+          io.to(`ride_${rideId}`).emit("ride:driver:location", telemetryPayload);
+          io.to(`ride_${rideId}`).emit(
+            "driver_location_update",
+            formatEventEnvelope("driver_location_update", telemetryPayload)
+          );
+        }
+
+        if (typeof ack === "function") {
+          ack({ success: true, updatedAt: telemetryPayload.updatedAt });
+        }
+      } catch (err) {
+        console.warn("[SOCKET driver:location:update error]", err.message);
+        if (typeof ack === "function") {
+          ack({ success: false, error: err.message });
+        }
+      }
+    });
+
+    // 7. Driver Online / Offline WebSocket Event Handlers
+    socket.on("driver:set_online", async (data, ack) => {
+      try {
+        const driverId = socket.user?.id || data?.driverId || data?.driver_id;
+        if (!driverId) {
+          if (typeof ack === "function") ack({ success: false, error: "Missing driver identity" });
+          return;
+        }
+
+        const { setDriverOnline } = require("./services/driverLocationService");
+        const result = await setDriverOnline(driverId, {
+          latitude: data?.latitude,
+          longitude: data?.longitude,
+          heading: data?.heading,
+          speed: data?.speed,
+        });
+
+        if (typeof ack === "function") ack(result);
+      } catch (err) {
+        if (typeof ack === "function") ack({ success: false, error: err.message });
+      }
+    });
+
+    socket.on("driver:set_offline", async (data, ack) => {
+      try {
+        const driverId = socket.user?.id || data?.driverId || data?.driver_id;
+        if (!driverId) {
+          if (typeof ack === "function") ack({ success: false, error: "Missing driver identity" });
+          return;
+        }
+
+        const { setDriverOffline, isDriverOnActiveTrip } = require("./services/driverLocationService");
+        const onTrip = await isDriverOnActiveTrip(driverId);
+        if (onTrip) {
+          if (typeof ack === "function") {
+            ack({ success: false, error: "Cannot go offline while on an active trip" });
+          }
+          return;
+        }
+
+        const result = await setDriverOffline(driverId);
         if (typeof ack === "function") ack(result);
       } catch (err) {
         if (typeof ack === "function") ack({ success: false, error: err.message });
@@ -364,6 +500,8 @@ function emitDriverLocationUpdate(rideId, userId, payload) {
   const envelope = formatEventEnvelope("driver_location_update", payload);
   io.to(`user_${userId}`).emit("driver_location_update", envelope);
   io.to(`ride_${rideId}`).emit("driver_location_update", envelope);
+  io.to(`user_${userId}`).emit("ride:driver:location", payload);
+  io.to(`ride_${rideId}`).emit("ride:driver:location", payload);
 }
 
 // 8. Notify user that trip has concluded at destination
@@ -384,6 +522,15 @@ function emitTripCompleted(rideId, userId, payload) {
   });
 }
 
+// 9. Broadcast driver account verification status updates (Super Admin approval/rejection/suspension)
+function emitDriverStatusUpdated(driverId, payload) {
+  if (!io) return;
+  const envelope = formatEventEnvelope("driver_status_updated", payload);
+  io.to(`driver_${driverId}`).emit("driver_status_updated", envelope);
+  io.emit("driver_status_updated", envelope);
+  console.log(`[SOCKET] Emitted driver_status_updated to driver_${driverId}:`, payload);
+}
+
 module.exports = {
   initSocket,
   getIO,
@@ -400,4 +547,5 @@ module.exports = {
   emitTripStarted,
   emitDriverLocationUpdate,
   emitTripCompleted,
+  emitDriverStatusUpdated,
 };

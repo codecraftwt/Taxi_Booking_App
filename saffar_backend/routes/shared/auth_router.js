@@ -8,10 +8,12 @@ const {
   resetPassword,
   driverForgotPassword,
   driverResetPassword,
+  getPublicFareConfigs,
 } = require("../../controllers/authController");
 
 const router = express.Router();
 
+router.get("/fares", getPublicFareConfigs);
 router.post("/sign_up", signUp);
 router.post("/driver_sign_up", driverSignUp);
 router.post("/sign_in", signIn);

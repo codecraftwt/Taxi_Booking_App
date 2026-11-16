@@ -18,11 +18,25 @@ async function calculateQuotedFare({ distanceKm, durationMinutes = null, categor
   const normCat = normalizeCategory(category);
   const catKey = normCat.toLowerCase();
 
-  const baseFareMinor = await settingsService.getSetting(`pricing.base_fare_minor.${catKey}`, catKey === "bike" ? 3000 : catKey === "car" ? 8000 : 4500);
-  const perKmMinor = await settingsService.getSetting(`pricing.per_km_minor.${catKey}`, catKey === "bike" ? 1000 : catKey === "car" ? 2200 : 1500);
-  const perMinMinor = await settingsService.getSetting(`pricing.per_min_minor.${catKey}`, catKey === "bike" ? 150 : catKey === "car" ? 300 : 200);
-  const minFareMinor = await settingsService.getSetting(`pricing.min_fare_minor.${catKey}`, catKey === "bike" ? 4000 : catKey === "car" ? 10000 : 5500);
-  const commissionRate = await settingsService.getSetting("pricing.commission_rate", 0.15);
+  let baseFareMinor = catKey === "bike" ? 2000 : catKey === "car" ? 5000 : catKey.includes("sedan") ? 7000 : 3000;
+  let perKmMinor = catKey === "bike" ? 800 : catKey === "car" ? 1500 : catKey.includes("sedan") ? 1800 : 1200;
+  let perMinMinor = catKey === "bike" ? 100 : catKey === "car" ? 200 : catKey.includes("sedan") ? 250 : 150;
+  let minFareMinor = catKey === "bike" ? 3000 : catKey === "car" ? 7000 : catKey.includes("sedan") ? 9000 : 4000;
+  let commissionRate = 0.15;
+
+  try {
+    const fc = await query(
+      "SELECT base_fare, per_km, per_minute, minimum_fare, commission_percentage FROM fare_configs WHERE LOWER(category) = LOWER($1) OR LOWER(category) LIKE LOWER($2) LIMIT 1",
+      [normCat, `%${catKey}%`]
+    );
+    if (fc.rows.length > 0) {
+      baseFareMinor = Math.round(parseFloat(fc.rows[0].base_fare) * 100);
+      perKmMinor = Math.round(parseFloat(fc.rows[0].per_km) * 100);
+      perMinMinor = Math.round(parseFloat(fc.rows[0].per_minute) * 100);
+      minFareMinor = Math.round(parseFloat(fc.rows[0].minimum_fare) * 100);
+      commissionRate = parseFloat(fc.rows[0].commission_percentage) / 100;
+    }
+  } catch (_) {}
 
   const distKm = Math.max(0.5, parseFloat(distanceKm) || 1.0);
   const estDurationMin = durationMinutes ? parseInt(durationMinutes, 10) : Math.max(1, Math.round(distKm * 2.5));
@@ -92,11 +106,25 @@ async function calculateFinalFare({
   const normCat = normalizeCategory(category);
   const catKey = normCat.toLowerCase();
 
-  const baseFareMinor = await settingsService.getSetting(`pricing.base_fare_minor.${catKey}`, catKey === "bike" ? 3000 : catKey === "car" ? 8000 : 4500);
-  const perKmMinor = await settingsService.getSetting(`pricing.per_km_minor.${catKey}`, catKey === "bike" ? 1000 : catKey === "car" ? 2200 : 1500);
-  const perMinMinor = await settingsService.getSetting(`pricing.per_min_minor.${catKey}`, catKey === "bike" ? 150 : catKey === "car" ? 300 : 200);
-  const minFareMinor = await settingsService.getSetting(`pricing.min_fare_minor.${catKey}`, catKey === "bike" ? 4000 : catKey === "car" ? 10000 : 5500);
-  const commissionRate = await settingsService.getSetting("pricing.commission_rate", 0.15);
+  let baseFareMinor = catKey === "bike" ? 2000 : catKey === "car" ? 5000 : catKey.includes("sedan") ? 7000 : 3000;
+  let perKmMinor = catKey === "bike" ? 800 : catKey === "car" ? 1500 : catKey.includes("sedan") ? 1800 : 1200;
+  let perMinMinor = catKey === "bike" ? 100 : catKey === "car" ? 200 : catKey.includes("sedan") ? 250 : 150;
+  let minFareMinor = catKey === "bike" ? 3000 : catKey === "car" ? 7000 : catKey.includes("sedan") ? 9000 : 4000;
+  let commissionRate = 0.15;
+
+  try {
+    const fc = await query(
+      "SELECT base_fare, per_km, per_minute, minimum_fare, commission_percentage FROM fare_configs WHERE LOWER(category) = LOWER($1) OR LOWER(category) LIKE LOWER($2) LIMIT 1",
+      [normCat, `%${catKey}%`]
+    );
+    if (fc.rows.length > 0) {
+      baseFareMinor = Math.round(parseFloat(fc.rows[0].base_fare) * 100);
+      perKmMinor = Math.round(parseFloat(fc.rows[0].per_km) * 100);
+      perMinMinor = Math.round(parseFloat(fc.rows[0].per_minute) * 100);
+      minFareMinor = Math.round(parseFloat(fc.rows[0].minimum_fare) * 100);
+      commissionRate = parseFloat(fc.rows[0].commission_percentage) / 100;
+    }
+  } catch (_) {}
 
   const distKm = Math.max(0.5, parseFloat(actualDistanceKm));
   const durMin = Math.max(1, parseInt(actualDurationMinutes, 10));

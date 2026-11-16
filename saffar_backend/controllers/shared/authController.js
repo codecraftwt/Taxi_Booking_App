@@ -1,4 +1,6 @@
 require("../../config/polyfill");
+const fs = require("fs");
+const path = require("path");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
@@ -7,6 +9,53 @@ const Constant = require("../../config/constants");
 const Err = require("../../config/error");
 const { query } = require("../../database");
 const Validator = require("../../utils/validator");
+
+function saveDocumentHelper(base64Data, driverId, docType, req) {
+  if (!base64Data || typeof base64Data !== "string") return null;
+  if (!base64Data.startsWith("data:")) return base64Data; // Already URL or plain path
+
+  try {
+    const matches = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) return base64Data;
+
+    let ext = "jpg";
+    if (matches[1].includes("pdf")) ext = "pdf";
+    else if (matches[1].includes("png")) ext = "png";
+    else if (matches[1].includes("jpeg") || matches[1].includes("jpg")) ext = "jpg";
+
+    const buffer = Buffer.from(matches[2], "base64");
+    const docsDir = path.join(__dirname, "../../uploads/documents");
+    if (!fs.existsSync(docsDir)) {
+      fs.mkdirSync(docsDir, { recursive: true });
+    }
+
+    const filename = `doc_${driverId}_${docType}_${Date.now()}.${ext}`;
+    const filePath = path.join(docsDir, filename);
+    fs.writeFileSync(filePath, buffer);
+
+    const host = req.get("host") || "localhost:5000";
+    const protocol = req.protocol || "http";
+    return `${protocol}://${host}/uploads/documents/${filename}`;
+  } catch (err) {
+    console.error("Error saving document file:", err);
+    return base64Data;
+  }
+}
+
+const getPublicFareConfigs = async (req, res) => {
+  try {
+    const fareRes = await query(
+      "SELECT category, base_fare, per_km, per_minute, minimum_fare, booking_fee, commission_percentage, surge_multiplier FROM fare_configs WHERE is_active = true ORDER BY base_fare ASC"
+    );
+    return res.status(200).json({
+      success: true,
+      fares: fareRes.rows,
+    });
+  } catch (error) {
+    console.error("Error in getPublicFareConfigs:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch vehicle fare configurations" });
+  }
+};
 
 const signUp = async (req, res) => {
   try {
@@ -200,7 +249,19 @@ const driverSignUp = async (req, res) => {
       vehicle_name: vehicleName,
       vehicle_number: vehicleNumber,
       vehicle_model: vehicleModel,
+      vehicle_category: vehicleCategory,
       email,
+      // Document fields from multi-step registration
+      driving_license_number: dlNumber,
+      driving_license_expiry: dlExpiry,
+      driving_license_doc: dlDoc,
+      rc_number: rcNumber,
+      rc_doc: rcDoc,
+      insurance_policy_number: insuranceNumber,
+      insurance_expiry: insuranceExpiry,
+      insurance_doc: insuranceDoc,
+      aadhaar_number: aadhaarNumber,
+      aadhaar_doc: aadhaarDoc,
     } = req.body;
 
     if (
@@ -259,13 +320,92 @@ const driverSignUp = async (req, res) => {
     const id = uuidv4();
     const cleanEmail = email && typeof email === "string" && email.trim().length > 0 ? email.trim().toLowerCase() : null;
     const cleanModel = vehicleModel && typeof vehicleModel === "string" ? vehicleModel.trim() : null;
+    const category = vehicleCategory || vehicleName || "Auto";
+    const vehicleColor = req.body.vehicle_color || (category === "Auto" ? "Yellow & Black" : "Standard");
 
+    // Process & store document files safely
+    const dlUrl = saveDocumentHelper(dlDoc, id, "dl", req);
+    const rcUrl = saveDocumentHelper(rcDoc, id, "rc", req);
+    const insUrl = saveDocumentHelper(insuranceDoc, id, "ins", req);
+    const adhUrl = saveDocumentHelper(aadhaarDoc, id, "adh", req);
+
+    // Initial driver account created in 'pending' status - Super Admin approval is mandatory
     const insertRes = await query(
-      `INSERT INTO drivers (id, name, phone, password, vehicle_name, vehicle_model, vehicle_number, email, active, verification_status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, 'Approved')
-       RETURNING id, name, phone, email, age, gender, address, vehicle_name, vehicle_model, vehicle_number, image_url, active, verification_status, created_at`,
+      `INSERT INTO drivers (
+        id, name, phone, password, vehicle_name, vehicle_model, vehicle_number, email, active, verification_status, is_online
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, 'pending', false)
+      RETURNING id, name, phone, email, age, gender, address, vehicle_name, vehicle_model, vehicle_number, image_url, active, verification_status, created_at`,
       [id, name, phone, hashedPassword, vehicleName, cleanModel, vehicleNumber, cleanEmail]
     );
+
+    // Register active vehicle record linked to driver
+    const vehicleId = "veh_" + uuidv4().substring(0, 16);
+    await query(
+      `INSERT INTO driver_vehicles (
+        id, driver_id, category, model, registration_number, color,
+        driving_license_number, driving_license_expiry, driving_license_doc,
+        rc_number, rc_doc,
+        insurance_policy_number, insurance_expiry, insurance_doc,
+        verification_status, is_active
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'pending', true)`,
+      [
+        vehicleId, id, category, cleanModel || vehicleName, vehicleNumber, vehicleColor,
+        dlNumber || null, dlExpiry || null, dlUrl || null,
+        rcNumber || vehicleNumber, rcUrl || null,
+        insuranceNumber || null, insuranceExpiry || null, insUrl || null
+      ]
+    );
+
+    // Insert driver_documents for Super Admin compliance inspection
+    if (dlNumber || dlUrl) {
+      await query(
+        `INSERT INTO driver_documents (id, driver_id, vehicle_id, document_type, document_number, expiry_date, document_url, verification_status)
+         VALUES ($1, $2, $3, 'driving_license', $4, $5, $6, 'pending')
+         ON CONFLICT (driver_id, document_type) DO UPDATE
+         SET document_number = EXCLUDED.document_number,
+             expiry_date = EXCLUDED.expiry_date,
+             document_url = EXCLUDED.document_url,
+             verification_status = 'pending'`,
+        ["doc_dl_" + uuidv4().substring(0, 16), id, vehicleId, dlNumber || null, dlExpiry || null, dlUrl || ""]
+      );
+    }
+
+    if (rcNumber || rcUrl) {
+      await query(
+        `INSERT INTO driver_documents (id, driver_id, vehicle_id, document_type, document_number, document_url, verification_status)
+         VALUES ($1, $2, $3, 'registration_certificate', $4, $5, 'pending')
+         ON CONFLICT (driver_id, document_type) DO UPDATE
+         SET document_number = EXCLUDED.document_number,
+             document_url = EXCLUDED.document_url,
+             verification_status = 'pending'`,
+        ["doc_rc_" + uuidv4().substring(0, 16), id, vehicleId, rcNumber || vehicleNumber, rcUrl || ""]
+      );
+    }
+
+    if (insuranceNumber || insUrl) {
+      await query(
+        `INSERT INTO driver_documents (id, driver_id, vehicle_id, document_type, document_number, expiry_date, document_url, verification_status)
+         VALUES ($1, $2, $3, 'insurance', $4, $5, $6, 'pending')
+         ON CONFLICT (driver_id, document_type) DO UPDATE
+         SET document_number = EXCLUDED.document_number,
+             expiry_date = EXCLUDED.expiry_date,
+             document_url = EXCLUDED.document_url,
+             verification_status = 'pending'`,
+        ["doc_ins_" + uuidv4().substring(0, 16), id, vehicleId, insuranceNumber || null, insuranceExpiry || null, insUrl || ""]
+      );
+    }
+
+    if (aadhaarNumber || adhUrl) {
+      await query(
+        `INSERT INTO driver_documents (id, driver_id, vehicle_id, document_type, document_number, document_url, verification_status)
+         VALUES ($1, $2, $3, 'identity_card', $4, $5, 'pending')
+         ON CONFLICT (driver_id, document_type) DO UPDATE
+         SET document_number = EXCLUDED.document_number,
+             document_url = EXCLUDED.document_url,
+             verification_status = 'pending'`,
+        ["doc_adh_" + uuidv4().substring(0, 16), id, vehicleId, aadhaarNumber || null, adhUrl || ""]
+      );
+    }
 
     const tokenSecret = config.TOKEN_SECRET_KEY;
     const token = jwt.sign(
@@ -275,7 +415,7 @@ const driverSignUp = async (req, res) => {
     );
 
     return res.status(200).json({
-      message: "Signed up and created driver successfully",
+      message: "Signed up successfully. Account submitted for Super Admin approval.",
       driver: insertRes.rows[0],
       token: token,
     });
@@ -365,7 +505,7 @@ const driverSignIn = async (req, res) => {
         address: driver.address,
         image_url: driver.image_url,
         active: driver.active,
-        verification_status: driver.verification_status || "Approved",
+        verification_status: driver.verification_status || "pending",
         vehicle_name: driver.vehicle_name,
         vehicle_model: driver.vehicle_model,
         vehicle_number: driver.vehicle_number,
@@ -490,7 +630,7 @@ const driverResetPassword = async (req, res) => {
       `UPDATE drivers 
        SET password = $1 
        WHERE phone = $2 OR phone = $3 OR email = $2 OR LOWER(email) = LOWER($2) 
-       RETURNING id, name, phone, email, age, gender, address, vehicle_name, vehicle_model, vehicle_number, image_url, active, COALESCE(verification_status, 'Approved') as verification_status, created_at`,
+       RETURNING id, name, phone, email, age, gender, address, vehicle_name, vehicle_model, vehicle_number, image_url, active, COALESCE(verification_status, 'pending') as verification_status, created_at`,
       [hashedPassword, target, stripped]
     );
 
@@ -667,4 +807,5 @@ module.exports = {
   resetPassword,
   driverForgotPassword,
   driverResetPassword,
+  getPublicFareConfigs,
 };

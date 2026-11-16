@@ -96,6 +96,8 @@ async function runMasterE2ETestSuite() {
     // Clean past test entities
     await query(`DELETE FROM driver_earnings WHERE driver_id IN ($1, $2)`, [testDriverAId, testDriverBId]);
     await query(`DELETE FROM ride_cancellations WHERE driver_id IN ($1, $2) OR user_id = $3`, [testDriverAId, testDriverBId, testUserId]);
+    await query(`DELETE FROM fare_breakdowns WHERE ride_id IN (SELECT id FROM rides WHERE driver_id IN ($1, $2) OR user_id = $3)`, [testDriverAId, testDriverBId, testUserId]);
+    await query(`DELETE FROM ride_offers WHERE driver_id IN ($1, $2)`, [testDriverAId, testDriverBId]);
     await query(`DELETE FROM ride_requests WHERE driver_id IN ($1, $2)`, [testDriverAId, testDriverBId]);
     await query(`DELETE FROM rides WHERE driver_id IN ($1, $2) OR user_id = $3`, [testDriverAId, testDriverBId, testUserId]);
     await query(`DELETE FROM driver_vehicles WHERE driver_id IN ($1, $2)`, [testDriverAId, testDriverBId]);
@@ -464,6 +466,9 @@ async function runMasterE2ETestSuite() {
     // Driver B attempts to accept same ride immediately
     const acceptB = await makeRequest("POST", `/api/driver/rides/${raceRideId}/accept`, null, driverBToken);
     assert(acceptB.status === 409 && acceptB.body.error.code === "RIDE_ALREADY_ACCEPTED", "Second driver (Driver B) atomically rejected with HTTP 409 RIDE_ALREADY_ACCEPTED");
+
+    // Clean up race ride so driver can receive future test rides
+    await query(`UPDATE rides SET cancelled = true, status = 'cancelled', end_time = NOW() WHERE id = $1`, [raceRideId]);
 
     // TEST CASE 8: User Cancels Booking
     console.log("\n[TEST CASE 8] User Cancels Booking");

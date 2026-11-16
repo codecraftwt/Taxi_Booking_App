@@ -257,10 +257,29 @@ async function _executeTier(session) {
 
 /**
  * Concurrency-Safe Atomic Acceptance via Coordinator
+ * Uses Redis atomic lock (SET ride:lock:<id> driver:<id> NX EX 15) + PostgreSQL SELECT FOR UPDATE
  */
 async function handleDriverAcceptance(rideId, driverId) {
-  // Delegate atomic database transaction with SELECT ... FOR UPDATE
+  const { acquireRideLock, releaseRideLock } = require("../../services/driverLocationService");
+
+  // 1. Acquire Redis atomic distributed lock (fast pre-validation barrier)
+  const hasLock = await acquireRideLock(rideId, driverId, 15);
+  if (!hasLock) {
+    return {
+      success: false,
+      code: "RIDE_ALREADY_ACCEPTED",
+      message: "Another driver has already accepted this booking.",
+    };
+  }
+
+  // 2. Delegate authoritative database transaction with SELECT ... FOR UPDATE
   const result = await acceptRideOffer(rideId, driverId);
+
+  if (!result.success) {
+    // Release the Redis lock if Postgres validation rejected (e.g., driver already has an active trip)
+    await releaseRideLock(rideId);
+    return result;
+  }
 
   if (result.success) {
     const session = activeDispatches.get(rideId);

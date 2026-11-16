@@ -10,6 +10,7 @@ const config = require("./config");
 const { initPostgresDatabase } = require("./database");
 const { initSocket } = require("./socket");
 const { initRedis } = require("./services/redisService");
+const { connectRedis } = require("./config/redis");
 
 const PORT = config.PORT;
 
@@ -20,6 +21,11 @@ async function startServer() {
 
     // 2. Initialize Redis Fast Ephemeral Cache
     await initRedis();
+    await connectRedis();
+
+    // 2b. Start background worker for stale driver cleanup (every 15s, 30s threshold)
+    const { startStaleDriverCleanupWorker } = require("./services/driverLocationService");
+    startStaleDriverCleanupWorker(15000, 30000);
 
     // 3. Create HTTP server with Socket.IO
     const httpServer = http.createServer(app);

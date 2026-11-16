@@ -51,6 +51,8 @@ async function runMigrations() {
         }
       }
     }
+
+    // One-time dummy purge already completed; do not wipe live data on startup
   } catch (err) {
     console.error("[MIGRATION ERROR] Could not complete migrations:", err.message);
   } finally {

@@ -42,7 +42,7 @@ const getDriverProfile = async (req, res) => {
               vehicle_name, vehicle_model, vehicle_number, image_url, active, 
               COALESCE(is_online, active) as is_online,
               current_lat, current_lng, heading, speed, last_location_updated_at,
-              COALESCE(verification_status, 'Approved') as verification_status, created_at 
+              COALESCE(verification_status, 'pending') as verification_status, created_at 
        FROM drivers WHERE id = $1`,
       [driverId]
     );
@@ -231,13 +231,22 @@ const toggleAvailability = async (req, res) => {
 
     // If going ONLINE:
     if (isOnline) {
-      // Verify driver account verification status
-      const driverStatus = (driverRow.verification_status || "Approved").toLowerCase();
-      if (driverStatus === "rejected" || driverStatus === "suspended") {
+      // Verify driver account verification status - Super Admin approval required
+      const driverStatus = (driverRow.verification_status || "pending").toLowerCase();
+      if (driverStatus !== "approved") {
         return res.status(403).json({
           error: {
-            code: "DRIVER_ACCOUNT_NOT_ELIGIBLE",
-            message: `Cannot go online. Your driver account is currently ${driverRow.verification_status}.`,
+            code: "DRIVER_ACCOUNT_PENDING_APPROVAL",
+            message: `Cannot go online. Your driver account is ${driverRow.verification_status || "Pending Approval"} by Super Admin. You will be able to go online once approved.`,
+          },
+        });
+      }
+
+      if (!driverRow.active) {
+        return res.status(403).json({
+          error: {
+            code: "DRIVER_ACCOUNT_INACTIVE",
+            message: "Cannot go online. Your driver account is currently inactive or suspended by Super Admin.",
           },
         });
       }
@@ -332,6 +341,23 @@ const toggleAvailability = async (req, res) => {
       console.warn("Driver availability state update warning:", availErr.message);
     }
 
+    // Sync Redis status & GEO index
+    try {
+      const { setDriverOnline, setDriverOffline } = require("../../services/driverLocationService");
+      if (isOnline) {
+        await setDriverOnline(driverId, {
+          latitude: latitude !== undefined ? parseFloat(latitude) : undefined,
+          longitude: longitude !== undefined ? parseFloat(longitude) : undefined,
+          heading: heading !== undefined ? parseFloat(heading) : 0,
+          speed: speed !== undefined ? parseFloat(speed) : 0,
+        });
+      } else {
+        await setDriverOffline(driverId);
+      }
+    } catch (redisErr) {
+      console.warn("[REDIS AVAILABILITY SYNC ERROR]", redisErr.message);
+    }
+
     return res.status(200).json({
       message: isOnline ? "Driver is now online and available for rides." : "Driver is now offline.",
       driver: result.rows[0],
@@ -397,6 +423,20 @@ const updateDriverLocation = async (req, res) => {
       [logId, driverId, lat, lng, head, spd, recordedAt]
     );
 
+    // Sync live location in Redis (GEO index, location hash, last_seen)
+    try {
+      const { updateDriverLocation: updateRedisLocation } = require("../../services/driverLocationService");
+      await updateRedisLocation({
+        driverId,
+        latitude: lat,
+        longitude: lng,
+        heading: head,
+        speed: spd,
+      });
+    } catch (redisLocErr) {
+      console.warn("[REDIS LIVE LOCATION SYNC ERROR]", redisLocErr.message);
+    }
+
     // Broadcast live driver location to User Panel if driver is currently on an active trip
     try {
       const activeRideRes = await query(
@@ -449,7 +489,7 @@ const getDriverStatus = async (req, res) => {
     const driverRes = await query(
       `SELECT id, name, active, COALESCE(is_online, active) as is_online, 
               current_lat, current_lng, heading, speed, last_location_updated_at,
-              COALESCE(verification_status, 'Approved') as verification_status
+              COALESCE(verification_status, 'pending') as verification_status
        FROM drivers WHERE id = $1`,
       [driverId]
     );
